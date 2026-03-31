@@ -34,6 +34,24 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Deploying on Vercel
+
+That error means the project is configured like a **static site** whose build output should live in a folder named `public`. **Next.js does not work that way**: `next build` writes to `.next`, and Vercel’s **Next.js** preset handles it automatically.
+
+Do this:
+
+1. **Vercel dashboard → your project → Settings → General → Build & Development Settings**
+   - **Framework Preset:** **Next.js**
+   - **Output Directory:** leave **empty** (disable any override). Do **not** set it to `public`.
+   - **Build Command:** `next build` (or leave default)
+   - **Install Command:** default (`npm install`, etc.)
+
+2. This repo includes **`vercel.json`** with `"framework": "nextjs"` and `"buildCommand": "next build"` so new deployments prefer the correct preset. If the dashboard still overrides **Output Directory**, clear that override there.
+
+3. **`public/`** in Next.js is only for **static assets** (favicon, images). It is not the build output folder. An empty `public/` exists here so that folder is present if you add assets later.
+
+**Note:** This app uses **`better-sqlite3`** and a file **`shop.db`**. Vercel serverless is not a good fit for a writable on-disk SQLite database; expect DB-related routes to need a hosted database (e.g. Turso, Neon, Postgres) or a different host (VPS, Docker) for full functionality.
+
 Production build:
 
 ```bash
