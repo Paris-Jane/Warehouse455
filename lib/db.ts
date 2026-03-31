@@ -3,8 +3,20 @@ import "server-only";
 import fs from "node:fs";
 import path from "node:path";
 import type { Database } from "better-sqlite3";
-import DatabaseConstructor from "better-sqlite3";
 import { Pool } from "pg";
+
+/**
+ * Do not statically import `better-sqlite3`: it is a native addon and crashes many
+ * serverless runtimes (e.g. Vercel) when loaded even if DATABASE_URL points at Postgres.
+ */
+function openSqliteDatabase(file: string): Database {
+  type BetterSqliteCtor = new (path: string) => Database;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const BetterSqlite = require("better-sqlite3") as BetterSqliteCtor;
+  const db = new BetterSqlite(file);
+  db.pragma("foreign_keys = ON");
+  return db;
+}
 
 const SQLITE_TABLES = [
   "customers",
@@ -47,7 +59,11 @@ function getOrCreatePgPool(): Pool {
     throw new Error("DATABASE_URL is not set");
   }
   if (!pgPool) {
-    pgPool = new Pool({ connectionString: url, max: 8 });
+    let connectionString = url;
+    if (/supabase\.co/i.test(url) && !/sslmode=/i.test(url)) {
+      connectionString = `${url}${url.includes("?") ? "&" : "?"}sslmode=require`;
+    }
+    pgPool = new Pool({ connectionString, max: 8 });
   }
   return pgPool;
 }
@@ -86,8 +102,7 @@ export function getDbState(): DbState {
   }
 
   try {
-    const db = new DatabaseConstructor(file);
-    db.pragma("foreign_keys = ON");
+    const db = openSqliteDatabase(file);
 
     const existing = new Set(listExistingSqliteTables(db));
     const missing = SQLITE_TABLES.filter((t) => !existing.has(t));

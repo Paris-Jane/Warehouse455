@@ -26,6 +26,40 @@ If `DATABASE_URL` is set, the app uses `pg` and `lib/sql/postgres.ts` (alternate
 
 ---
 
+## Supabase: connect and verify
+
+Get the URI from Supabase: **Project Settings → Database → Connection string → URI**. Prefer the **Transaction pooler** (port **6543**) for Vercel/serverless.
+
+You configure the same variable name in **two different places** — local vs deployed:
+
+| Where | What to use | Notes |
+|--------|-------------|--------|
+| **Your laptop** | **`.env.local`** | Gitignored; **not** uploaded to GitHub or Vercel. Only for `npm run dev`. |
+| **Vercel (production)** | **Dashboard env vars** | **Project → Settings → Environment Variables** → add **`DATABASE_URL`** → choose **Production** (and **Preview** if you want preview deploys to hit Supabase too) → **Save** → **Redeploy**. |
+
+**You should not rely on `.env.local` for deployment.** Vercel never reads `.env.local` from the repo. If `DATABASE_URL` is only in `.env.local`, production builds will fall back to SQLite / missing `shop.db` and fail or behave wrong.
+
+**Minimal Vercel setup**
+
+1. Vercel → your project → **Settings** → **Environment Variables**
+2. **Key:** `DATABASE_URL`  
+   **Value:** full `postgresql://...pooler.supabase.com:6543/postgres` string (with password)
+3. Environments: at least **Production**
+4. Redeploy the latest deployment
+
+**Local dev with Supabase:** copy that same URI into **`.env.local`** (optional `SCORING_PROVIDER=mock`), restart `npm run dev`. Remove `DATABASE_URL` from `.env.local` when you want **`shop.db`** again.
+
+**Verify**
+
+- **`/debug/schema`** — Postgres tables (e.g. `Customers`) vs SQLite names (`customers`)
+- **`/select-customer`** — list loads without a red database banner
+
+**Schema:** must match **`lib/sql/postgres.ts`** (quoted table names). Adjust SQL or your Supabase schema so they align.
+
+**Note:** `NEXT_PUBLIC_SUPABASE_*` / service role keys are only for **`lib/supabase/*`**. The main app DB access uses **`DATABASE_URL`** + `pg`.
+
+---
+
 ## Setup (official track: SQLite)
 
 ```bash
