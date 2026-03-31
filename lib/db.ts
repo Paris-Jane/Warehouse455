@@ -53,7 +53,7 @@ function listExistingSqliteTables(db: Database): string[] {
 let cached: DbState | null = null;
 let pgPool: Pool | null = null;
 
-/** Drop sslmode from URI so `pg` does not force verify-full (breaks on Vercel with Supabase pooler). */
+/** Drop sslmode from URI so `pg` does not force verify-full (breaks on Vercel with many managed Postgres hosts). */
 function stripSslModeQueryParam(connectionUrl: string): string {
   const q = connectionUrl.indexOf("?");
   if (q === -1) return connectionUrl;
@@ -63,19 +63,30 @@ function stripSslModeQueryParam(connectionUrl: string): string {
   return params.length > 0 ? `${base}?${params.join("&")}` : base;
 }
 
+/** Direct DB is `*.supabase.co`; transaction pooler is `*.pooler.supabase.com` (both need relaxed TLS on Vercel). */
+function isSupabaseDatabaseUrl(connectionUrl: string): boolean {
+  return (
+    /supabase\.co\b/i.test(connectionUrl) ||
+    /pooler\.supabase\.com\b/i.test(connectionUrl)
+  );
+}
+
 function getOrCreatePgPool(): Pool {
   const url = process.env.DATABASE_URL?.trim();
   if (!url) {
     throw new Error("DATABASE_URL is not set");
   }
   if (!pgPool) {
-    const isSupabase = /\.supabase\.co/i.test(url);
-    const connectionString = isSupabase ? stripSslModeQueryParam(url) : url;
-    // Vercel + Supabase: strict CA verify often yields SELF_SIGNED_CERT_IN_CHAIN; keep TLS, skip chain verify.
+    const insecureSsl =
+      process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "0" ||
+      process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === "false";
+    const relaxTls = isSupabaseDatabaseUrl(url) || insecureSsl;
+    const connectionString = relaxTls ? stripSslModeQueryParam(url) : url;
+    // Vercel + managed Postgres: strict CA verify often yields SELF_SIGNED_CERT_IN_CHAIN; TLS still on with rejectUnauthorized: false.
     pgPool = new Pool({
       connectionString,
       max: 8,
-      ...(isSupabase ? { ssl: { rejectUnauthorized: false } } : {}),
+      ...(relaxTls ? { ssl: { rejectUnauthorized: false } } : {}),
     });
   }
   return pgPool;
