@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 import { selectCustomerAction } from "@/app/actions/customer";
-import { SQL } from "@/lib/sql/queries";
 import { getDbState } from "@/lib/db";
+import { SQL } from "@/lib/sql/queries";
 
 import { SelectCustomerClient } from "./select-customer-client";
 

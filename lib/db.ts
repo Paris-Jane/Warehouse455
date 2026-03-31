@@ -2,7 +2,8 @@ import "server-only";
 
 import fs from "node:fs";
 import path from "node:path";
-import Database from "better-sqlite3";
+import type { Database } from "better-sqlite3";
+import DatabaseConstructor from "better-sqlite3";
 
 const REQUIRED_TABLES = [
   "customers",
@@ -53,7 +54,7 @@ export function getDbState(): DbState {
   }
 
   try {
-    const db = new Database(file);
+    const db = new DatabaseConstructor(file);
     db.pragma("foreign_keys = ON");
 
     const existing = new Set(listExistingTables(db));
