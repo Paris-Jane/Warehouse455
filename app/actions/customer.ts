@@ -3,8 +3,8 @@
 import { redirect } from "next/navigation";
 
 import { setCustomerCookie } from "@/lib/customer";
+import { dbCustomerById } from "@/lib/db-access";
 import { getDbState } from "@/lib/db";
-import { SQL } from "@/lib/sql/queries";
 
 export async function selectCustomerAction(formData: FormData) {
   const state = getDbState();
@@ -18,9 +18,7 @@ export async function selectCustomerAction(formData: FormData) {
     redirect(`/select-customer?error=invalid`);
   }
 
-  const row = state.db.prepare(SQL.customerById).get(id) as
-    | { customer_id: number }
-    | undefined;
+  const row = await dbCustomerById(state, id);
   if (!row) {
     redirect(`/select-customer?error=unknown`);
   }

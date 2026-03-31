@@ -2,8 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getSelectedCustomer } from "@/lib/customer";
+import { dbProductsList } from "@/lib/db-access";
 import { getDbState } from "@/lib/db";
-import { SQL } from "@/lib/sql/queries";
 
 import { PlaceOrderForm } from "./place-order-form";
 
@@ -31,12 +31,12 @@ export default async function PlaceOrderPage({
     );
   }
 
-  const session = await getSelectedCustomer(state.db);
+  const session = await getSelectedCustomer(state);
   if (session.status === "none" || session.status === "invalid_cookie") {
     redirect("/select-customer");
   }
 
-  const products = state.db.prepare(SQL.productsList).all() as Product[];
+  const products = (await dbProductsList(state)) as Product[];
 
   return (
     <section>

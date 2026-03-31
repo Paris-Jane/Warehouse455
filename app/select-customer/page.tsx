@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 import { selectCustomerAction } from "@/app/actions/customer";
+import { dbCustomersList } from "@/lib/db-access";
 import { getDbState } from "@/lib/db";
-import { SQL } from "@/lib/sql/queries";
 
 import { SelectCustomerClient } from "./select-customer-client";
 
@@ -34,7 +34,7 @@ export default async function SelectCustomerPage({
     );
   }
 
-  const customers = state.db.prepare(SQL.customersList).all() as Row[];
+  const customers = (await dbCustomersList(state)) as Row[];
 
   return (
     <section>
@@ -56,12 +56,10 @@ export default async function SelectCustomerPage({
 
       {customers.length === 0 ? (
         <div className="card">
-          <p>
-            No customers found. The <span className="mono">customers</span> table is empty.
-          </p>
+          <p>No customers found.</p>
           <p className="muted">
-            Seed data via <span className="mono">npm run db:init</span> (warning: recreates{" "}
-            <span className="mono">shop.db</span>).
+            With SQLite: run <span className="mono">npm run db:init</span>. With Supabase: load data into
+            the <span className="mono">Customers</span> table.
           </p>
         </div>
       ) : (

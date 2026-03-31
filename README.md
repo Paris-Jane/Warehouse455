@@ -1,102 +1,91 @@
 # Warehouse455
 
-Next.js (App Router) + TypeScript + SQLite (`better-sqlite3`) demo for a warehouse operations UI with a **prediction provider** boundary. The app works end-to-end **without** a real ML model by using a mock scorer that writes rows into `order_predictions`.
+Next.js (App Router) + TypeScript student web app on top of an **operational database**, aligned with the chapter prompts (no auth; customer cookie; orders; **order_predictions**; Python scoring).
 
-## Setup
+## Chapter / assignment alignment
 
-1. Install dependencies:
+| Prompt | Requirement | Where it lives |
+|--------|----------------|----------------|
+| **0** | Next.js App Router, `shop.db`, `better-sqlite3`, nav, README | `app/`, `lib/db.ts`, `lib/db-access.ts`, `schema.sql` |
+| **0.5** | `/debug/schema` — tables + columns | `app/debug/schema/page.tsx` |
+| **1** | `/select-customer`, searchable list, `customer_id` cookie, banner | `app/select-customer/`, `lib/customer.ts`, `app/layout.tsx` |
+| **2** | `/dashboard` — name, email, order count, spend, 5 recent orders | `app/dashboard/page.tsx`, `lib/sql/queries.ts` |
+| **3** | `/place-order`, transaction, `fulfilled=0`, `total_value` | `app/place-order/`, `app/actions/order.ts` |
+| **4** | `/orders`, `/orders/[order_id]` line items | `app/orders/` |
+| **5** | `/warehouse/priority` — **exact** SQLite SQL joining `order_predictions` | `SQL.warehousePriorityQueue` in `lib/sql/queries.ts` |
+| **6** | `/scoring` runs `python jobs/run_inference.py`, stdout count, safe spawn | `lib/scoring/python-provider.ts`, `jobs/run_inference.py` |
+| **7** | Errors, empty states, QA checklist (below) | pages + this README |
+
+**Database contract (SQLite):** only `customers`, `orders`, `order_items`, `products`, `order_predictions` — defined in `schema.sql`. Do not add business tables for the assignment.
+
+**Jupyter / full ML pipeline:** not required here. `jobs/run_inference.py` uses the same **placeholder** math as `lib/scoring/mock-provider.ts`; swap in your model later.
+
+### Optional: Postgres / Supabase
+
+If `DATABASE_URL` is set, the app uses `pg` and `lib/sql/postgres.ts` (alternate table/column names). The **chapter SQL** for the warehouse queue applies to **SQLite only**. Default scoring provider becomes **`mock`** so Node updates the DB the app actually reads.
+
+---
+
+## Setup (official track: SQLite)
 
 ```bash
 npm install
-```
-
-2. Ensure `shop.db` exists at the project root.
-
-- If you do not already have one, generate it from the bundled schema + seed:
-
-```bash
-npm run db:init
-```
-
-**Warning:** `npm run db:init` overwrites `shop.db` if it already exists.
-
-3. (Optional) Copy environment defaults:
-
-```bash
-cp .env.example .env.local
-```
-
-## Run the app
-
-```bash
+npm run db:init    # creates/overwrites shop.db at project root
+cp .env.example .env.local   # optional
 npm run dev
 ```
 
 Open `http://localhost:3000`.
 
+### Python for scoring (Prompt 6)
+
+The app runs **`python jobs/run_inference.py`** by default when using SQLite. If your system only has `python3`:
+
+```bash
+export PYTHON_BIN=python3
+```
+
+Or use **`SCORING_PROVIDER=mock`** (Node writes `order_predictions` directly; no Python).
+
+---
+
+## Run / build
+
+```bash
+npm run dev
+npm run build && npm start
+```
+
+---
+
+## Manual QA checklist (chapter)
+
+1. **Select customer** — `/select-customer`; banner shows selection.
+2. **Place order** — `/place-order`; multiple line items; transaction.
+3. **Order history** — `/orders` and `/orders/[order_id]` (wrong id → 404).
+4. **Run scoring** — `/scoring` with **`SCORING_PROVIDER` unset** (SQLite): runs Python, prints `orders_scored`, no crash on failure.
+5. **Priority queue** — `/warehouse/priority` shows rows after scoring (unfulfilled + `order_predictions`).
+6. **Debug schema** — `/debug/schema` lists tables/columns for `shop.db`.
+
+---
+
 ## Deploying on Vercel
 
-That error means the project is configured like a **static site** whose build output should live in a folder named `public`. **Next.js does not work that way**: `next build` writes to `.next`, and Vercel’s **Next.js** preset handles it automatically.
+Use **Next.js** preset; **Output Directory** empty (not `public`). See `vercel.json`.
 
-Do this:
+SQLite on Vercel is limited (no durable file). For production, use hosted Postgres (`DATABASE_URL`) + `SCORING_PROVIDER=mock`, or run the app on a VM/Docker with `shop.db`.
 
-1. **Vercel dashboard → your project → Settings → General → Build & Development Settings**
-   - **Framework Preset:** **Next.js**
-   - **Output Directory:** leave **empty** (disable any override). Do **not** set it to `public`.
-   - **Build Command:** `next build` (or leave default)
-   - **Install Command:** default (`npm install`, etc.)
+---
 
-2. This repo includes **`vercel.json`** with `"framework": "nextjs"` and `"buildCommand": "next build"` so new deployments prefer the correct preset. If the dashboard still overrides **Output Directory**, clear that override there.
+## Where to plug in the real model
 
-3. **`public/`** in Next.js is only for **static assets** (favicon, images). It is not the build output folder. An empty `public/` exists here so that folder is present if you add assets later.
+- **Python:** replace `mock_probability()` in `jobs/run_inference.py` and keep writing `order_predictions` keyed by `order_id`.
+- **In-process:** `lib/scoring/mock-provider.ts` + `dbUpsertPredictions` in `lib/db-access.ts` (SQLite) or Postgres shipment path in `lib/sql/postgres.ts`.
 
-**Note:** This app uses **`better-sqlite3`** and a file **`shop.db`**. Vercel serverless is not a good fit for a writable on-disk SQLite database; expect DB-related routes to need a hosted database (e.g. Turso, Neon, Postgres) or a different host (VPS, Docker) for full functionality.
+---
 
-Production build:
+## Project constraints
 
-```bash
-npm run build
-npm start
-```
-
-## Switch scoring providers
-
-Set `SCORING_PROVIDER` in `.env.local` (or your shell environment):
-
-- `mock` (default): deterministic placeholder probabilities for all **unfulfilled** orders; upserts into `order_predictions`.
-- `python`: runs `python jobs/run_inference.py` from the project root with a timeout and captures stdout/stderr. The stub script does **not** write predictions yet; implement that in Python when your pipeline is ready.
-
-Example:
-
-```bash
-SCORING_PROVIDER=mock npm run dev
-SCORING_PROVIDER=python npm run dev
-```
-
-On macOS, if `python` is not on your PATH, symlink it or adjust your environment; the app invokes exactly `python` as specified in the project requirements.
-
-## Where to plug in the real model later
-
-Replace or extend **only the scoring provider implementations** — not routes, not SQL consumers:
-
-- **Mock logic (swap first):** `lib/scoring/mock-provider.ts` — today’s placeholder math + call to `upsertPredictions`.
-- **Python adapter:** `jobs/run_inference.py` — run inference and **write** `order_predictions` rows in `shop.db` (or call another service). Keep stdout/stderr useful for debugging.
-- **Future adapters:** add e.g. `lib/scoring/http-provider.ts` and branch in `lib/scoring/provider.ts`.
-- **Shared DB write path:** `lib/scoring/upsert-predictions.ts` + SQL in `lib/sql/queries.ts` (`upsertPrediction`).
-
-Pages such as `/scoring` call `runScoringAction()` → `getScoringProvider()` → `scoreOpenOrders()`; the warehouse queue reads predictions with SQL in `lib/sql/queries.ts`.
-
-## Manual QA checklist
-
-- Select a customer on `/select-customer`; confirm cookie-backed banner updates.
-- Place an order on `/place-order` with multiple lines; confirm `/orders` shows it and totals look right.
-- Open `/orders/[order_id]` and verify line items and ownership (wrong id → 404).
-- Run **Run Scoring** on `/scoring` in **mock** mode; confirm `/warehouse/priority` populates for unfulfilled orders with predictions.
-- Switch `SCORING_PROVIDER=python`, run scoring, confirm the script output appears in the result panel and the app still loads the same routes without UI changes.
-- Visit `/debug/schema` and confirm tables match expectations.
-
-## Project constraints (reminder)
-
-- No authentication: customer is chosen and stored as `customer_id` in an HTTP-only cookie (`customer_id`).
-- No ORM: prepared statements via `better-sqlite3`.
-- Operational tables only: `customers`, `orders`, `order_items`, `products`, `order_predictions`.
+- No authentication: `customer_id` in HTTP-only cookie.
+- No ORM: `better-sqlite3` (SQLite) or `pg` (Postgres) with prepared/parameterized SQL.
+- Operational tables only for the assignment schema (see `schema.sql`).

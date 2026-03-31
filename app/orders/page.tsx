@@ -2,8 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getSelectedCustomer } from "@/lib/customer";
+import { dbCustomerOrders } from "@/lib/db-access";
 import { getDbState } from "@/lib/db";
-import { SQL } from "@/lib/sql/queries";
 
 type OrderRow = {
   order_id: number;
@@ -30,14 +30,15 @@ export default async function OrdersPage({
     );
   }
 
-  const session = await getSelectedCustomer(state.db);
+  const session = await getSelectedCustomer(state);
   if (session.status === "none" || session.status === "invalid_cookie") {
     redirect("/select-customer");
   }
 
-  const rows = state.db
-    .prepare(SQL.customerOrders)
-    .all(session.customer.customer_id) as OrderRow[];
+  const rows = (await dbCustomerOrders(
+    state,
+    session.customer.customer_id
+  )) as OrderRow[];
 
   return (
     <section>

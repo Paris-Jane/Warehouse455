@@ -32,7 +32,7 @@ export default async function RootLayout({
   let customer: CustomerRow | null = null;
 
   if (state.ok) {
-    const sel = await getSelectedCustomer(state.db);
+    const sel = await getSelectedCustomer(state);
     if (sel.status === "none") session = { kind: "none" };
     else if (sel.status === "invalid_cookie") session = { kind: "invalid" };
     else {

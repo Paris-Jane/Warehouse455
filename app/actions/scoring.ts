@@ -15,7 +15,7 @@ export async function runScoringAction(): Promise<ScoringResult> {
     };
   }
 
-  const picked = tryGetScoringProvider();
+  const picked = await tryGetScoringProvider();
   if (!picked.ok) {
     return {
       ok: false,

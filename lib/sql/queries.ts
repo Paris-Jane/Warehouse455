@@ -73,6 +73,7 @@ export const SQL = {
     ORDER BY oi.order_item_id
   `,
 
+  /** Chapter warehouse query (keep in sync with course materials). */
   warehousePriorityQueue: `
     SELECT
       o.order_id,

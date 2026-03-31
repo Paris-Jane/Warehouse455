@@ -1,5 +1,8 @@
+import {
+  dbListTableNames,
+  dbTableColumns,
+} from "@/lib/db-access";
 import { getDbState } from "@/lib/db";
-import { SQL } from "@/lib/sql/queries";
 
 type TableNameRow = { name: string };
 
@@ -12,14 +15,14 @@ type ColumnInfo = {
   pk: number;
 };
 
-function safeIdent(name: string): string {
-  if (!/^[A-Za-z0-9_]+$/.test(name)) {
-    throw new Error(`Unsafe table name: ${name}`);
+function safeSqliteTableName(name: string): string {
+  if (!/^[a-z0-9_]+$/.test(name)) {
+    throw new Error(`Unsafe SQLite table name: ${name}`);
   }
   return name;
 }
 
-export default function DebugSchemaPage() {
+export default async function DebugSchemaPage() {
   const state = getDbState();
   if (!state.ok) {
     return (
@@ -30,20 +33,27 @@ export default function DebugSchemaPage() {
     );
   }
 
-  const tables = state.db.prepare(SQL.listTableNames).all() as TableNameRow[];
+  const tables = (await dbListTableNames(state)) as TableNameRow[];
 
-  const sections = tables.map((t) => {
-    const table = safeIdent(t.name);
-    const cols = state.db.prepare(`PRAGMA table_info(${table})`).all() as ColumnInfo[];
-    return { table: t.name, cols };
-  });
+  const sections: { table: string; cols: ColumnInfo[] }[] = [];
+  for (const t of tables) {
+    try {
+      const cols =
+        state.kind === "sqlite"
+          ? await dbTableColumns(state, safeSqliteTableName(t.name))
+          : await dbTableColumns(state, t.name);
+      sections.push({ table: t.name, cols });
+    } catch {
+      sections.push({ table: t.name, cols: [] });
+    }
+  }
 
   return (
     <section>
       <h1>Debug: schema</h1>
       <p className="muted">
-        Developer-only view of the real SQLite schema via <span className="mono">sqlite_master</span>{" "}
-        and <span className="mono">PRAGMA table_info</span>.
+        Developer-only: SQLite uses <span className="mono">PRAGMA table_info</span>; Postgres uses{" "}
+        <span className="mono">information_schema.columns</span>.
       </p>
 
       {sections.length === 0 ? (

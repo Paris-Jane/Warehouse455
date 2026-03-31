@@ -1,9 +1,9 @@
 import "server-only";
 
 import { cookies } from "next/headers";
-import type { Database } from "better-sqlite3";
 
-import { SQL } from "@/lib/sql/queries";
+import { dbCustomerById } from "@/lib/db-access";
+import type { DbReady } from "@/lib/db";
 
 export const CUSTOMER_COOKIE = "customer_id";
 
@@ -23,18 +23,8 @@ export async function getCookieCustomerId(): Promise<number | null> {
   return id;
 }
 
-export function findCustomerById(
-  db: Database,
-  customerId: number
-): CustomerRow | null {
-  const row = db.prepare(SQL.customerById).get(customerId) as
-    | CustomerRow
-    | undefined;
-  return row ?? null;
-}
-
 export async function getSelectedCustomer(
-  db: Database
+  ready: DbReady
 ): Promise<
   | { status: "none" }
   | { status: "invalid_cookie" }
@@ -43,7 +33,7 @@ export async function getSelectedCustomer(
   const id = await getCookieCustomerId();
   if (id == null) return { status: "none" };
 
-  const customer = findCustomerById(db, id);
+  const customer = await dbCustomerById(ready, id);
   if (!customer) return { status: "invalid_cookie" };
 
   return { status: "ok", customer };

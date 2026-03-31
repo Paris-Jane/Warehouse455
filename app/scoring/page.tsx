@@ -13,9 +13,19 @@ export default function ScoringPage() {
 
       <div className="card">
         <p style={{ marginTop: 0 }}>
-          Scoring is executed through a provider selected by{" "}
-          <span className="mono">SCORING_PROVIDER</span>. The UI does not embed model logic.
+          Triggers the inference job (default: <span className="mono">python jobs/run_inference.py</span>
+          ). With <span className="mono">shop.db</span>, the script writes{" "}
+          <span className="mono">order_predictions</span>. Use{" "}
+          <span className="mono">SCORING_PROVIDER=mock</span> if Python is not installed (e.g. some
+          serverless hosts).
         </p>
+        {state.ok && state.kind === "postgres" ? (
+          <p className="muted">
+            You are using Postgres: the Python script only updates SQLite{" "}
+            <span className="mono">shop.db</span>. Use <span className="mono">SCORING_PROVIDER=mock</span>{" "}
+            for scoring, or run inference against Postgres separately.
+          </p>
+        ) : null}
         <p style={{ marginBottom: 0 }}>
           Active provider: <span className="pill mono">{label}</span>
         </p>

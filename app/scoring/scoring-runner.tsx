@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 
 import { runScoringAction } from "@/app/actions/scoring";
@@ -32,8 +33,9 @@ export function ScoringRunner({ initialLabel }: { initialLabel: string }) {
 
       {!result ? (
         <p className="muted" style={{ marginTop: "0.85rem", marginBottom: 0 }}>
-          Run scoring to populate or refresh <span className="mono">order_predictions</span>, then
-          check the warehouse priority queue.
+          Default: runs <span className="mono">python jobs/run_inference.py</span>, which writes{" "}
+          <span className="mono">order_predictions</span> in <span className="mono">shop.db</span>.
+          Then open the warehouse queue to see ranked orders.
         </p>
       ) : (
         <div style={{ marginTop: "1rem" }}>
@@ -48,6 +50,12 @@ export function ScoringRunner({ initialLabel }: { initialLabel: string }) {
 
           {result.errorMessage ? (
             <p style={{ color: "var(--danger)", marginTop: 0 }}>{result.errorMessage}</p>
+          ) : null}
+
+          {result.ok ? (
+            <p style={{ marginTop: "0.5rem" }}>
+              <Link href="/warehouse/priority">Open warehouse priority queue →</Link>
+            </p>
           ) : null}
 
           {result.stdoutPreview ? (

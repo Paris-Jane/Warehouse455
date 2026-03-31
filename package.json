@@ -10,8 +10,10 @@
     "db:init": "sqlite3 shop.db < schema.sql"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.49.1",
     "better-sqlite3": "^11.8.1",
     "next": "^15.1.0",
+    "pg": "^8.13.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "server-only": "^0.0.1"
@@ -20,6 +22,7 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.1",
+    "@types/pg": "^8.11.10",
     "@types/react-dom": "^19.0.2",
     "typescript": "^5.7.2"
   }

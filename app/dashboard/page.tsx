@@ -2,8 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getSelectedCustomer } from "@/lib/customer";
+import {
+  dbCustomerOrderStats,
+  dbCustomerRecentOrders,
+} from "@/lib/db-access";
 import { getDbState } from "@/lib/db";
-import { SQL } from "@/lib/sql/queries";
 
 type RecentOrder = {
   order_id: number;
@@ -23,19 +26,17 @@ export default async function DashboardPage() {
     );
   }
 
-  const session = await getSelectedCustomer(state.db);
+  const session = await getSelectedCustomer(state);
   if (session.status === "none" || session.status === "invalid_cookie") {
     redirect("/select-customer");
   }
 
   const customer = session.customer;
-  const stats = state.db
-    .prepare(SQL.customerOrderStats)
-    .get(customer.customer_id) as { order_count: number; total_spend: number };
-
-  const recent = state.db
-    .prepare(SQL.customerRecentOrders)
-    .all(customer.customer_id) as RecentOrder[];
+  const stats = await dbCustomerOrderStats(state, customer.customer_id);
+  const recent = await dbCustomerRecentOrders(
+    state,
+    customer.customer_id
+  ) as RecentOrder[];
 
   return (
     <section>
@@ -53,8 +54,7 @@ export default async function DashboardPage() {
           <span className="pill">Total spend: ${stats.total_spend.toFixed(2)}</span>
         </div>
         <p className="muted" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
-          Total spend uses <span className="mono">SUM(total_value)</span> across all orders for this
-          customer.
+          Total spend is the sum of order totals for this customer.
         </p>
       </div>
 

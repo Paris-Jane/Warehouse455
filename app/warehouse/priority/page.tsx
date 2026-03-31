@@ -1,5 +1,5 @@
+import { dbWarehouseQueue } from "@/lib/db-access";
 import { getDbState } from "@/lib/db";
-import { SQL } from "@/lib/sql/queries";
 
 type Row = {
   order_id: number;
@@ -13,7 +13,7 @@ type Row = {
   prediction_timestamp: string;
 };
 
-export default function WarehousePriorityPage() {
+export default async function WarehousePriorityPage() {
   const state = getDbState();
   if (!state.ok) {
     return (
@@ -26,42 +26,67 @@ export default function WarehousePriorityPage() {
 
   let rows: Row[] = [];
   try {
-    rows = state.db.prepare(SQL.warehousePriorityQueue).all() as Row[];
+    rows = (await dbWarehouseQueue(state)) as Row[];
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return (
       <section>
         <h1>Warehouse priority queue</h1>
         <p style={{ color: "var(--danger)" }}>
-          Query failed. If your real schema differs, update{" "}
-          <span className="mono">lib/sql/queries.ts</span>.{" "}
+          Query failed. For Postgres adjust <span className="mono">lib/sql/postgres.ts</span>; for
+          SQLite use the query in <span className="mono">lib/sql/queries.ts</span> (
+          <span className="mono">warehousePriorityQueue</span>).{" "}
           <span className="mono">{message}</span>
         </p>
       </section>
     );
   }
 
+  const sqliteCopy = (
+    <>
+      <p style={{ marginTop: 0 }}>
+        This queue shows up to 50 <strong>unfulfilled</strong> orders that have rows in{" "}
+        <span className="mono">order_predictions</span>, sorted by highest{" "}
+        <span className="mono">late_delivery_probability</span> first, then oldest{" "}
+        <span className="mono">order_timestamp</span>. It helps the warehouse ship the riskiest open
+        orders first. The SQL matches the chapter spec (join <span className="mono">orders</span>,{" "}
+        <span className="mono">customers</span>, <span className="mono">order_predictions</span>).
+      </p>
+      <p className="muted" style={{ marginBottom: 0 }}>
+        If this is empty, run <strong>Run Scoring</strong> on <span className="mono">/scoring</span>{" "}
+        so <span className="mono">jobs/run_inference.py</span> (or mock mode) fills{" "}
+        <span className="mono">order_predictions</span>.
+      </p>
+    </>
+  );
+
+  const postgresCopy = (
+    <>
+      <p style={{ marginTop: 0 }}>
+        This queue lists <strong>unfulfilled</strong> orders (no <span className="mono">Shipments</span>{" "}
+        row with <span className="mono">ship_datetime</span> yet), using the latest shipment signal and{" "}
+        <span className="mono">Orders.risk_score</span> as a fallback. This path is for optional
+        Postgres/Supabase; the chapter assignment uses SQLite + <span className="mono">order_predictions</span>.
+      </p>
+      <p className="muted" style={{ marginBottom: 0 }}>
+        Run scoring from <span className="mono">/scoring</span> (mock provider) to refresh shipment scores.
+      </p>
+    </>
+  );
+
   return (
     <section>
       <h1>Warehouse priority queue</h1>
 
       <div className="card">
-        <p style={{ marginTop: 0 }}>
-          This queue ranks <strong>unfulfilled</strong> orders by highest predicted late-delivery risk
-          first, then oldest orders first. It exists so the warehouse can ship the riskiest open orders
-          sooner while predictions are still operational data in{" "}
-          <span className="mono">order_predictions</span>.
-        </p>
-        <p className="muted" style={{ marginBottom: 0 }}>
-          If the table is empty, run scoring from <span className="mono">/scoring</span> (mock mode
-          writes placeholder predictions for open orders).
-        </p>
+        {state.kind === "sqlite" ? sqliteCopy : postgresCopy}
       </div>
 
       {rows.length === 0 ? (
         <p className="muted">
-          No rows returned. Either there are no unfulfilled orders with predictions yet, or the join
-          returned nothing.
+          {state.kind === "sqlite"
+            ? "No rows (need unfulfilled orders with matching order_predictions — run scoring first)."
+            : "No unfulfilled orders in the queue."}
         </p>
       ) : (
         <div className="table-wrap">

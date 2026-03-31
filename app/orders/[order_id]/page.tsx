@@ -2,8 +2,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { getSelectedCustomer } from "@/lib/customer";
+import {
+  dbOrderBelongsToCustomer,
+  dbOrderLineItems,
+} from "@/lib/db-access";
 import { getDbState } from "@/lib/db";
-import { SQL } from "@/lib/sql/queries";
 
 type LineRow = {
   product_name: string;
@@ -29,7 +32,7 @@ export default async function OrderDetailPage({
     );
   }
 
-  const session = await getSelectedCustomer(state.db);
+  const session = await getSelectedCustomer(state);
   if (session.status === "none" || session.status === "invalid_cookie") {
     redirect("/select-customer");
   }
@@ -39,14 +42,16 @@ export default async function OrderDetailPage({
     notFound();
   }
 
-  const ok = state.db.prepare(SQL.orderBelongsToCustomer).get(id, session.customer.customer_id) as
-    | { ok: number }
-    | undefined;
-  if (!ok) {
+  const belongs = await dbOrderBelongsToCustomer(
+    state,
+    id,
+    session.customer.customer_id
+  );
+  if (!belongs) {
     notFound();
   }
 
-  const lines = state.db.prepare(SQL.orderLineItems).all(id) as LineRow[];
+  const lines = (await dbOrderLineItems(state, id)) as LineRow[];
 
   return (
     <section>

@@ -37,6 +37,8 @@ export function createPythonScriptScoringProvider(): ScoringProvider {
       const ts = new Date().toISOString();
       const cwd = process.cwd();
       const script = path.join("jobs", "run_inference.py");
+      /** Assignment uses `python jobs/run_inference.py`. Override with PYTHON_BIN (e.g. python3). */
+      const pythonExe = process.env.PYTHON_BIN?.trim() || "python";
 
       const stdoutChunks: Buffer[] = [];
       const stderrChunks: Buffer[] = [];
@@ -47,7 +49,7 @@ export function createPythonScriptScoringProvider(): ScoringProvider {
           stdout: string;
           stderr: string;
         }>((resolve, reject) => {
-          const child = spawn("python", [script], {
+          const child = spawn(pythonExe, [script], {
             cwd,
             env: { ...process.env },
             stdio: ["ignore", "pipe", "pipe"],
