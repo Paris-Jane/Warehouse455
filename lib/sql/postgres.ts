@@ -36,7 +36,7 @@ export const PgSql = {
       NULLIF(trim(split_part(COALESCE(full_name, ''), ' ', 1)), '') AS first_name,
       CASE
         WHEN strpos(trim(COALESCE(full_name, '')), ' ') > 0 THEN
-          trim(substr(trim(full_name) FROM strpos(trim(full_name), ' ') + 1))
+          trim(substring(trim(full_name) from (strpos(trim(full_name), ' ') + 1)))
         ELSE ''
       END AS last_name,
       COALESCE(email, '') AS email
@@ -44,7 +44,7 @@ export const PgSql = {
     ORDER BY
       lower(CASE
         WHEN strpos(trim(COALESCE(full_name, '')), ' ') > 0 THEN
-          trim(substr(trim(full_name) FROM strpos(trim(full_name), ' ') + 1))
+          trim(substring(trim(full_name) from (strpos(trim(full_name), ' ') + 1)))
         ELSE trim(COALESCE(full_name, ''))
       END),
       lower(split_part(trim(COALESCE(full_name, '')), ' ', 1))
@@ -56,7 +56,7 @@ export const PgSql = {
       NULLIF(trim(split_part(COALESCE(full_name, ''), ' ', 1)), '') AS first_name,
       CASE
         WHEN strpos(trim(COALESCE(full_name, '')), ' ') > 0 THEN
-          trim(substr(trim(full_name) FROM strpos(trim(full_name), ' ') + 1))
+          trim(substring(trim(full_name) from (strpos(trim(full_name), ' ') + 1)))
         ELSE ''
       END AS last_name,
       COALESCE(email, '') AS email
