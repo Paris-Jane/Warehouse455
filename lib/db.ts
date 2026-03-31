@@ -53,17 +53,30 @@ function listExistingSqliteTables(db: Database): string[] {
 let cached: DbState | null = null;
 let pgPool: Pool | null = null;
 
+/** Drop sslmode from URI so `pg` does not force verify-full (breaks on Vercel with Supabase pooler). */
+function stripSslModeQueryParam(connectionUrl: string): string {
+  const q = connectionUrl.indexOf("?");
+  if (q === -1) return connectionUrl;
+  const base = connectionUrl.slice(0, q);
+  const rest = connectionUrl.slice(q + 1);
+  const params = rest.split("&").filter((p) => !/^sslmode=/i.test(p.trim()));
+  return params.length > 0 ? `${base}?${params.join("&")}` : base;
+}
+
 function getOrCreatePgPool(): Pool {
   const url = process.env.DATABASE_URL?.trim();
   if (!url) {
     throw new Error("DATABASE_URL is not set");
   }
   if (!pgPool) {
-    let connectionString = url;
-    if (/supabase\.co/i.test(url) && !/sslmode=/i.test(url)) {
-      connectionString = `${url}${url.includes("?") ? "&" : "?"}sslmode=require`;
-    }
-    pgPool = new Pool({ connectionString, max: 8 });
+    const isSupabase = /\.supabase\.co/i.test(url);
+    const connectionString = isSupabase ? stripSslModeQueryParam(url) : url;
+    // Vercel + Supabase: strict CA verify often yields SELF_SIGNED_CERT_IN_CHAIN; keep TLS, skip chain verify.
+    pgPool = new Pool({
+      connectionString,
+      max: 8,
+      ...(isSupabase ? { ssl: { rejectUnauthorized: false } } : {}),
+    });
   }
   return pgPool;
 }
