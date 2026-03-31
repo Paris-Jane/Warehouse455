@@ -9,8 +9,7 @@ export const CUSTOMER_COOKIE = "customer_id";
 
 export type CustomerRow = {
   customer_id: number;
-  first_name: string;
-  last_name: string;
+  full_name: string;
   email: string;
 };
 

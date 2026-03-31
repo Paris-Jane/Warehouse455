@@ -17,7 +17,7 @@ type Props = {
 export function CustomerBanner({ dbError, customer, session }: Props) {
   if (dbError) {
     return (
-      <div className="banner error" role="status">
+      <div className="banner banner--error" role="status">
         <div className="banner-inner">
           <strong>Database issue:</strong> {dbError.message}
         </div>
@@ -27,8 +27,8 @@ export function CustomerBanner({ dbError, customer, session }: Props) {
 
   if (session.kind === "invalid") {
     return (
-      <div className="banner warn" role="status">
-        <div className="banner-inner row" style={{ justifyContent: "space-between" }}>
+      <div className="banner banner--warn" role="status">
+        <div className="banner-inner banner-inner--split">
           <span>
             The saved customer id is not valid.{" "}
             <Link href="/select-customer">Select a customer</Link> again.
@@ -41,26 +41,27 @@ export function CustomerBanner({ dbError, customer, session }: Props) {
 
   if (session.kind === "none") {
     return (
-      <div className="banner warn" role="status">
+      <div className="banner banner--warn" role="status">
         <div className="banner-inner">
-          No customer selected.{" "}
-          <Link href="/select-customer">Choose a customer</Link> to use the shop flows.
+          No active customer. Open{" "}
+          <Link href="/select-customer">Select Customer</Link> to choose who you are acting as before
+          using the dashboard, placing orders, or viewing order history.
         </div>
       </div>
     );
   }
 
   const c = customer ?? session.customer;
-  const name = `${c.first_name} ${c.last_name}`.trim();
 
   return (
-    <div className="banner" role="status">
-      <div className="banner-inner row" style={{ justifyContent: "space-between" }}>
-        <span>
-          Acting as <strong>{name}</strong>{" "}
-          <span className="muted">({c.email})</span>{" "}
-          <span className="pill mono">customer_id={c.customer_id}</span>
-        </span>
+    <div className="banner banner--active" role="status">
+      <div className="banner-inner banner-inner--split">
+        <div className="banner-customer">
+          <span className="banner-label">Acting as</span>
+          <strong className="banner-name">{c.full_name}</strong>
+          <span className="banner-meta">{c.email}</span>
+          <span className="badge-mono">ID {c.customer_id}</span>
+        </div>
         <ClearSessionButton label="Change customer" />
       </div>
     </div>

@@ -2,25 +2,27 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getSelectedCustomer } from "@/lib/customer";
+import { formatDateTime } from "@/lib/format";
 import {
   dbCustomerOrderStats,
   dbCustomerRecentOrders,
+  type OrderSummaryRow,
 } from "@/lib/db-access";
 import { getDbState } from "@/lib/db";
 
-type RecentOrder = {
-  order_id: number;
-  order_timestamp: string;
-  fulfilled: number;
-  total_value: number;
-};
+function fulfillmentLabel(shipmentCount: number): { text: string; shipped: boolean } {
+  if (shipmentCount > 0) return { text: "Shipped", shipped: true };
+  return { text: "Open", shipped: false };
+}
 
 export default async function DashboardPage() {
   const state = getDbState();
   if (!state.ok) {
     return (
       <section>
-        <h1>Customer dashboard</h1>
+        <header className="page-header">
+          <h1 className="page-title">Customer dashboard</h1>
+        </header>
         <p>{state.message}</p>
       </section>
     );
@@ -33,65 +35,102 @@ export default async function DashboardPage() {
 
   const customer = session.customer;
   const stats = await dbCustomerOrderStats(state, customer.customer_id);
-  const recent = await dbCustomerRecentOrders(
-    state,
-    customer.customer_id
-  ) as RecentOrder[];
+  const recent = await dbCustomerRecentOrders(state, customer.customer_id);
 
   return (
     <section>
-      <h1>Customer dashboard</h1>
+      <header className="page-header">
+        <h1 className="page-title">Customer overview</h1>
+        <p className="page-desc">
+          Summary and shortcuts for the currently selected customer. Order totals and shipment status
+          come from your operational tables (<span className="mono">Orders</span>,{" "}
+          <span className="mono">Shipments</span>).
+        </p>
+      </header>
 
       <div className="card">
-        <div>
-          <strong>
-            {customer.first_name} {customer.last_name}
-          </strong>
+        <h2 className="card__title" style={{ margin: "0 0 0.75rem", fontSize: "1rem" }}>
+          Selected customer
+        </h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+          <strong style={{ fontSize: "1.1rem" }}>{customer.full_name}</strong>
+          <span className="muted">{customer.email}</span>
+          <span className="badge-mono" style={{ alignSelf: "flex-start", marginTop: "0.35rem" }}>
+            customer_id {customer.customer_id}
+          </span>
         </div>
-        <div className="muted">{customer.email}</div>
-        <div style={{ marginTop: "0.75rem" }} className="row">
-          <span className="pill">Orders: {stats.order_count}</span>
-          <span className="pill">Total spend: ${stats.total_spend.toFixed(2)}</span>
+
+        <div className="stat-grid">
+          <div className="stat-card">
+            <div className="stat-card__label">Total orders</div>
+            <div className="stat-card__value">{stats.order_count}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card__label">Total spend</div>
+            <div className="stat-card__value">${stats.total_spend.toFixed(2)}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card__label">Most recent order</div>
+            <div className="stat-card__value" style={{ fontSize: "0.95rem", fontWeight: 600 }}>
+              {stats.last_order_datetime
+                ? formatDateTime(stats.last_order_datetime)
+                : "—"}
+            </div>
+          </div>
         </div>
-        <p className="muted" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
-          Total spend is the sum of order totals for this customer.
-        </p>
+
+        <div className="actions-row">
+          <Link href="/place-order" className="button primary">
+            Place new order
+          </Link>
+          <Link href="/orders" className="button">
+            View order history
+          </Link>
+        </div>
       </div>
 
-      <h2>Five most recent orders</h2>
+      <h2 className="section-title">Recent orders</h2>
       {recent.length === 0 ? (
-        <p className="muted">No orders yet. Try placing one.</p>
+        <p className="muted">No orders yet for this customer.</p>
       ) : (
         <div className="table-wrap">
-          <table>
+          <table className="data-table">
             <thead>
               <tr>
-                <th>order_id</th>
-                <th>order_timestamp</th>
-                <th>fulfilled</th>
-                <th>total_value</th>
+                <th>Order ID</th>
+                <th>Order date</th>
+                <th className="num">Items</th>
+                <th>Status</th>
+                <th className="num">Total</th>
               </tr>
             </thead>
             <tbody>
-              {recent.map((o) => (
-                <tr key={o.order_id}>
-                  <td className="mono">
-                    <Link href={`/orders/${o.order_id}`}>{o.order_id}</Link>
-                  </td>
-                  <td className="mono">{o.order_timestamp}</td>
-                  <td>{o.fulfilled ? "yes" : "no"}</td>
-                  <td>${o.total_value.toFixed(2)}</td>
-                </tr>
-              ))}
+              {(recent as OrderSummaryRow[]).map((o) => {
+                const st = fulfillmentLabel(o.shipment_count);
+                return (
+                  <tr key={o.order_id}>
+                    <td className="mono">
+                      <Link href={`/orders/${o.order_id}`}>{o.order_id}</Link>
+                    </td>
+                    <td>{formatDateTime(o.order_datetime)}</td>
+                    <td className="num">{o.item_count}</td>
+                    <td>
+                      <span
+                        className={
+                          st.shipped ? "status-pill status-pill--shipped" : "status-pill status-pill--open"
+                        }
+                      >
+                        {st.text}
+                      </span>
+                    </td>
+                    <td className="num">${o.order_total.toFixed(2)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
-
-      <p style={{ marginTop: "1rem" }}>
-        <Link href="/place-order">Place an order</Link> ·{" "}
-        <Link href="/orders">View full order history</Link>
-      </p>
     </section>
   );
 }

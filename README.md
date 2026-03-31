@@ -9,20 +9,20 @@ Next.js (App Router) + TypeScript student web app on top of an **operational dat
 | **0** | Next.js App Router, `shop.db`, `better-sqlite3`, nav, README | `app/`, `lib/db.ts`, `lib/db-access.ts`, `schema.sql` |
 | **0.5** | `/debug/schema` — tables + columns | `app/debug/schema/page.tsx` |
 | **1** | `/select-customer`, searchable list, `customer_id` cookie, banner | `app/select-customer/`, `lib/customer.ts`, `app/layout.tsx` |
-| **2** | `/dashboard` — name, email, order count, spend, 5 recent orders | `app/dashboard/page.tsx`, `lib/sql/queries.ts` |
-| **3** | `/place-order`, transaction, `fulfilled=0`, `total_value` | `app/place-order/`, `app/actions/order.ts` |
+| **2** | `/dashboard` — full name, email, order count, spend, recent orders | `app/dashboard/page.tsx`, `lib/sql/queries.ts` |
+| **3** | `/place-order`, transaction, `order_total`, `line_total` on items | `app/place-order/`, `app/actions/order.ts` |
 | **4** | `/orders`, `/orders/[order_id]` line items | `app/orders/` |
-| **5** | `/warehouse/priority` — **exact** SQLite SQL joining `order_predictions` | `SQL.warehousePriorityQueue` in `lib/sql/queries.ts` |
+| **5** | `/warehouse/priority` — open orders (no shipments) + `order_predictions` | `SQL.warehousePriorityQueue` in `lib/sql/queries.ts` |
 | **6** | `/scoring` runs `python jobs/run_inference.py`, stdout count, safe spawn | `lib/scoring/python-provider.ts`, `jobs/run_inference.py` |
 | **7** | Errors, empty states, QA checklist (below) | pages + this README |
 
-**Database contract (SQLite):** only `customers`, `orders`, `order_items`, `products`, `order_predictions` — defined in `schema.sql`. Do not add business tables for the assignment.
+**Database contract (SQLite):** `customers` (`full_name`, `email`), `orders` (`order_datetime`, `order_total`), `order_items` (with `line_total`), `products`, `shipments`, `order_predictions` — see `schema.sql`. `npm run db:init` rebuilds `shop.db` from scratch.
 
 **Jupyter / full ML pipeline:** not required here. `jobs/run_inference.py` uses the same **placeholder** math as `lib/scoring/mock-provider.ts`; swap in your model later.
 
 ### Optional: Postgres / Supabase
 
-If `DATABASE_URL` is set, the app uses `pg` and `lib/sql/postgres.ts` (alternate table/column names). The **chapter SQL** for the warehouse queue applies to **SQLite only**. Default scoring provider becomes **`mock`** so Node updates the DB the app actually reads.
+If `DATABASE_URL` is set, the app uses `pg` and `lib/sql/postgres.ts`. Create `order_predictions` in Supabase if missing (`sql/postgres_order_predictions.sql`). Default scoring provider is **`mock`** so predictions are written to the same database the app reads.
 
 ---
 
@@ -98,7 +98,7 @@ npm run build && npm start
 2. **Place order** — `/place-order`; multiple line items; transaction.
 3. **Order history** — `/orders` and `/orders/[order_id]` (wrong id → 404).
 4. **Run scoring** — `/scoring` with **`SCORING_PROVIDER` unset** (SQLite): runs Python, prints `orders_scored`, no crash on failure.
-5. **Priority queue** — `/warehouse/priority` shows rows after scoring (unfulfilled + `order_predictions`).
+5. **Priority queue** — `/warehouse/priority` shows open orders (no `shipments` yet); run scoring to fill `order_predictions`.
 6. **Debug schema** — `/debug/schema` lists tables/columns for `shop.db`.
 
 ---
@@ -114,7 +114,7 @@ SQLite on Vercel is limited (no durable file). For production, use hosted Postgr
 ## Where to plug in the real model
 
 - **Python:** replace `mock_probability()` in `jobs/run_inference.py` and keep writing `order_predictions` keyed by `order_id`.
-- **In-process:** `lib/scoring/mock-provider.ts` + `dbUpsertPredictions` in `lib/db-access.ts` (SQLite) or Postgres shipment path in `lib/sql/postgres.ts`.
+- **In-process:** `lib/scoring/mock-provider.ts` + `dbUpsertPredictions` → `order_predictions` (SQLite or Postgres).
 
 ---
 

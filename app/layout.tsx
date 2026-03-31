@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import type { CustomerRow } from "@/lib/customer";
 import { getSelectedCustomer } from "@/lib/customer";
@@ -46,8 +47,13 @@ export default async function RootLayout({
       <body>
         <header className="topbar">
           <div className="topbar-inner">
-            <div style={{ fontWeight: 700 }}>Warehouse455</div>
-            <Nav />
+            <div className="topbar-brand">
+              <Link href="/select-customer" className="brand-title">
+                Warehouse455
+              </Link>
+              <span className="brand-subtitle">Operations</span>
+            </div>
+            <Nav customerSelected={session.kind === "ok"} />
           </div>
         </header>
 

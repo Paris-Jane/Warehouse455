@@ -66,20 +66,22 @@ def main() -> int:
         conn.execute("PRAGMA foreign_keys = ON")
         cur = conn.execute(
             """
-            SELECT order_id, customer_id, order_timestamp, total_value
-            FROM orders
-            WHERE fulfilled = 0
-            ORDER BY order_id
+            SELECT o.order_id, o.customer_id, o.order_datetime, o.order_total
+            FROM orders o
+            WHERE NOT EXISTS (
+              SELECT 1 FROM shipments s WHERE s.order_id = o.order_id
+            )
+            ORDER BY o.order_id
             """
         )
         rows = cur.fetchall()
         n = 0
-        for order_id, customer_id, order_timestamp, total_value in rows:
+        for order_id, customer_id, order_datetime, order_total in rows:
             prob = mock_probability(
                 int(order_id),
                 int(customer_id) if customer_id is not None else 0,
-                float(total_value or 0),
-                str(order_timestamp or ""),
+                float(order_total or 0),
+                str(order_datetime or ""),
             )
             pred = 1 if prob >= 0.5 else 0
             conn.execute(UPSERT_SQL, (int(order_id), prob, pred))

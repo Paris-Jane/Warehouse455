@@ -40,26 +40,36 @@ export async function dbCustomerById(
 export async function dbCustomerOrderStats(
   ready: DbReady,
   customerId: number
-): Promise<{ order_count: number; total_spend: number }> {
+): Promise<{ order_count: number; total_spend: number; last_order_datetime: string | null }> {
   if (ready.kind === "sqlite") {
-    return ready.db.prepare(SQL.customerOrderStats).get(customerId) as {
+    const row = ready.db.prepare(SQL.customerOrderStats).get(customerId) as {
       order_count: number;
       total_spend: number;
+      last_order_datetime: string | null;
+    };
+    return {
+      order_count: num(row?.order_count, 0),
+      total_spend: num(row?.total_spend, 0),
+      last_order_datetime: row?.last_order_datetime ?? null,
     };
   }
   const { rows } = await ready.pool.query(PgSql.customerOrderStats, [customerId]);
-  const r = rows[0] as { order_count: number; total_spend: number } | undefined;
+  const r = rows[0] as
+    | { order_count: number; total_spend: number; last_order_datetime: string | null }
+    | undefined;
   return {
     order_count: num(r?.order_count, 0),
     total_spend: num(r?.total_spend, 0),
+    last_order_datetime: r?.last_order_datetime ?? null,
   };
 }
 
 export type OrderSummaryRow = {
   order_id: number;
-  order_timestamp: string;
-  fulfilled: number;
-  total_value: number;
+  order_datetime: string;
+  order_total: number;
+  item_count: number;
+  shipment_count: number;
 };
 
 export async function dbCustomerRecentOrders(
@@ -72,9 +82,10 @@ export async function dbCustomerRecentOrders(
   const { rows } = await ready.pool.query(PgSql.customerRecentOrders, [customerId]);
   return rows.map((r) => ({
     order_id: num((r as OrderSummaryRow).order_id),
-    order_timestamp: String((r as OrderSummaryRow).order_timestamp ?? ""),
-    fulfilled: num((r as OrderSummaryRow).fulfilled),
-    total_value: num((r as OrderSummaryRow).total_value),
+    order_datetime: String((r as OrderSummaryRow).order_datetime ?? ""),
+    order_total: num((r as OrderSummaryRow).order_total),
+    item_count: num((r as OrderSummaryRow).item_count),
+    shipment_count: num((r as OrderSummaryRow).shipment_count),
   }));
 }
 
@@ -126,7 +137,8 @@ export async function dbPlaceOrder(
       const info = insertOrder.run(customerId, total);
       const orderId = Number(info.lastInsertRowid);
       for (const l of lines) {
-        insertItem.run(orderId, l.product_id, l.quantity, l.unit_price);
+        const lineTotal = l.quantity * l.unit_price;
+        insertItem.run(orderId, l.product_id, l.quantity, l.unit_price, lineTotal);
       }
     });
     run();
@@ -139,11 +151,13 @@ export async function dbPlaceOrder(
     const ins = await client.query(PgSql.insertOrder, [customerId, total]);
     const orderId = num((ins.rows[0] as { order_id: number }).order_id);
     for (const l of lines) {
+      const lineTotal = l.quantity * l.unit_price;
       await client.query(PgSql.insertOrderItem, [
         orderId,
         l.product_id,
         l.quantity,
         l.unit_price,
+        lineTotal,
       ]);
     }
     await client.query("COMMIT");
@@ -165,9 +179,10 @@ export async function dbCustomerOrders(
   const { rows } = await ready.pool.query(PgSql.customerOrders, [customerId]);
   return rows.map((r) => ({
     order_id: num((r as OrderSummaryRow).order_id),
-    order_timestamp: String((r as OrderSummaryRow).order_timestamp ?? ""),
-    fulfilled: num((r as OrderSummaryRow).fulfilled),
-    total_value: num((r as OrderSummaryRow).total_value),
+    order_datetime: String((r as OrderSummaryRow).order_datetime ?? ""),
+    order_total: num((r as OrderSummaryRow).order_total),
+    item_count: num((r as OrderSummaryRow).item_count),
+    shipment_count: num((r as OrderSummaryRow).shipment_count),
   }));
 }
 
@@ -187,6 +202,38 @@ export async function dbOrderBelongsToCustomer(
     customerId,
   ]);
   return rows.length > 0;
+}
+
+export type OrderHeaderRow = {
+  order_id: number;
+  order_datetime: string;
+  order_total: number;
+  item_count: number;
+};
+
+export async function dbOrderHeaderForCustomer(
+  ready: DbReady,
+  orderId: number,
+  customerId: number
+): Promise<OrderHeaderRow | null> {
+  if (ready.kind === "sqlite") {
+    const row = ready.db
+      .prepare(SQL.orderHeaderForCustomer)
+      .get(orderId, customerId) as OrderHeaderRow | undefined;
+    return row ?? null;
+  }
+  const { rows } = await ready.pool.query(PgSql.orderHeaderForCustomer, [
+    orderId,
+    customerId,
+  ]);
+  const r = rows[0] as OrderHeaderRow | undefined;
+  if (!r) return null;
+  return {
+    order_id: num(r.order_id),
+    order_datetime: String(r.order_datetime ?? ""),
+    order_total: num(r.order_total),
+    item_count: num(r.item_count),
+  };
 }
 
 export type LineItemRow = {
@@ -214,11 +261,11 @@ export async function dbOrderLineItems(
 
 export type WarehouseRow = {
   order_id: number;
-  order_timestamp: string;
-  total_value: number;
-  fulfilled: number;
+  order_datetime: string;
+  order_total: number;
   customer_id: number;
   customer_name: string;
+  has_prediction: number;
   late_delivery_probability: number;
   predicted_late_delivery: number;
   prediction_timestamp: string;
@@ -231,11 +278,11 @@ export async function dbWarehouseQueue(ready: DbReady): Promise<WarehouseRow[]> 
   const { rows } = await ready.pool.query(PgSql.warehousePriorityQueue);
   return rows.map((r) => ({
     order_id: num((r as WarehouseRow).order_id),
-    order_timestamp: String((r as WarehouseRow).order_timestamp ?? ""),
-    total_value: num((r as WarehouseRow).total_value),
-    fulfilled: num((r as WarehouseRow).fulfilled),
+    order_datetime: String((r as WarehouseRow).order_datetime ?? ""),
+    order_total: num((r as WarehouseRow).order_total),
     customer_id: num((r as WarehouseRow).customer_id),
     customer_name: String((r as WarehouseRow).customer_name ?? ""),
+    has_prediction: num((r as WarehouseRow).has_prediction),
     late_delivery_probability: num((r as WarehouseRow).late_delivery_probability),
     predicted_late_delivery: num((r as WarehouseRow).predicted_late_delivery),
     prediction_timestamp: String((r as WarehouseRow).prediction_timestamp ?? ""),
@@ -247,7 +294,6 @@ type OpenOrderRow = {
   customer_id: number;
   order_timestamp: string;
   total_value: number;
-  fulfilled: number;
 };
 
 export async function dbOpenOrdersForScoring(ready: DbReady): Promise<OpenOrderRow[]> {
@@ -260,7 +306,6 @@ export async function dbOpenOrdersForScoring(ready: DbReady): Promise<OpenOrderR
     customer_id: num((r as OpenOrderRow).customer_id),
     order_timestamp: String((r as OpenOrderRow).order_timestamp ?? ""),
     total_value: num((r as OpenOrderRow).total_value),
-    fulfilled: num((r as OpenOrderRow).fulfilled),
   }));
 }
 
@@ -277,16 +322,11 @@ export async function dbUpsertPredictions(
   try {
     await client.query("BEGIN");
     for (const p of predictions) {
-      const u = await client.query(PgSql.updateLatestShipmentLateDelivery, [
+      await client.query(PgSql.upsertOrderPrediction, [
         p.order_id,
+        p.late_delivery_probability,
         p.predicted_late_delivery,
       ]);
-      if ((u.rowCount ?? 0) === 0) {
-        await client.query(PgSql.insertShipmentScore, [
-          p.order_id,
-          p.predicted_late_delivery,
-        ]);
-      }
     }
     await client.query("COMMIT");
   } catch (e) {

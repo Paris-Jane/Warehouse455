@@ -10,7 +10,6 @@ type OpenOrderRow = {
   customer_id: number;
   order_timestamp: string;
   total_value: number;
-  fulfilled: number;
 };
 
 function mockProbability(row: OpenOrderRow): number {

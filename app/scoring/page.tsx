@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { getDbState } from "@/lib/db";
 import { getScoringProviderLabel } from "@/lib/scoring/provider";
 
@@ -9,24 +11,34 @@ export default function ScoringPage() {
 
   return (
     <section>
-      <h1>Run scoring</h1>
+      <header className="page-header">
+        <h1 className="page-title">Run scoring</h1>
+        <p className="page-desc">
+          Execute the inference step so <span className="mono">order_predictions</span> stays current for the
+          warehouse queue. The button runs your configured provider and shows stdout/stderr and status.
+        </p>
+      </header>
 
       <div className="card">
-        <p style={{ marginTop: 0 }}>
-          Triggers the inference job (default: <span className="mono">python jobs/run_inference.py</span>
-          ). With <span className="mono">shop.db</span>, the script writes{" "}
-          <span className="mono">order_predictions</span>. Use{" "}
-          <span className="mono">SCORING_PROVIDER=mock</span> if Python is not installed (e.g. some
-          serverless hosts).
-        </p>
-        {state.ok && state.kind === "postgres" ? (
-          <p className="muted">
-            You are using Postgres: the Python script only updates SQLite{" "}
-            <span className="mono">shop.db</span>. Use <span className="mono">SCORING_PROVIDER=mock</span>{" "}
-            for scoring, or run inference against Postgres separately.
-          </p>
-        ) : null}
-        <p style={{ marginBottom: 0 }}>
+        <h2 className="card__title" style={{ marginTop: 0 }}>
+          How it works
+        </h2>
+        <ul className="muted" style={{ margin: "0.5rem 0 0", paddingLeft: "1.2rem", fontSize: "0.9rem" }}>
+          <li>
+            <strong>Python</strong> (default without <span className="mono">DATABASE_URL</span>): runs{" "}
+            <span className="mono">python jobs/run_inference.py</span> against <span className="mono">shop.db</span>.
+          </li>
+          <li>
+            <strong>Mock</strong> (default with <span className="mono">DATABASE_URL</span>, or set{" "}
+            <span className="mono">SCORING_PROVIDER=mock</span>): deterministic scores written with{" "}
+            <span className="mono">pg</span> or SQLite.
+          </li>
+          <li>
+            After a successful run, open the{" "}
+            <Link href="/warehouse/priority">priority queue</Link> to see updated probabilities.
+          </li>
+        </ul>
+        <p style={{ marginBottom: 0, marginTop: "1rem", fontSize: "0.9rem" }}>
           Active provider: <span className="pill mono">{label}</span>
         </p>
       </div>

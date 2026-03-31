@@ -4,74 +4,76 @@ import { useMemo, useState } from "react";
 
 import { selectCustomerAction } from "@/app/actions/customer";
 
-type Row = {
-  customer_id: number;
-  first_name: string;
-  last_name: string;
-  email: string;
-};
+import type { CustomerRow } from "@/lib/customer";
 
-export function SelectCustomerClient({ customers }: { customers: Row[] }) {
+export function SelectCustomerClient({ customers }: { customers: CustomerRow[] }) {
   const [q, setQ] = useState("");
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return customers;
     return customers.filter((c) => {
-      const hay = `${c.first_name} ${c.last_name} ${c.email} ${c.customer_id}`.toLowerCase();
+      const hay = `${c.full_name} ${c.email} ${c.customer_id}`.toLowerCase();
       return hay.includes(needle);
     });
   }, [customers, q]);
 
   return (
-    <div className="card">
-      <div className="field">
-        <label htmlFor="search">Search</label>
-        <input
-          id="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Name, email, or customer id"
-          autoComplete="off"
-        />
+    <div className="card card--flush">
+      <div className="toolbar card__body" style={{ marginBottom: 0 }}>
+        <div className="field">
+          <label htmlFor="customer-search">Search directory</label>
+          <input
+            id="customer-search"
+            className="search-input"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Name, email, or customer ID"
+            autoComplete="off"
+          />
+        </div>
       </div>
 
-      <div className="table-wrap" style={{ marginTop: "0.75rem" }}>
-        <table>
+      <div className="table-wrap table-wrap--flat" style={{ border: "none", borderRadius: 0 }}>
+        <table className="data-table">
           <thead>
             <tr>
-              <th>Name</th>
+              <th>Customer ID</th>
+              <th>Full name</th>
               <th>Email</th>
-              <th style={{ width: 120 }}>customer_id</th>
-              <th style={{ width: 160 }} />
+              <th className="num" style={{ width: "140px" }}>
+                Action
+              </th>
             </tr>
           </thead>
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={4} className="muted">
-                  No matches.
+                <td colSpan={4}>
+                  <div className="empty-state">
+                    <div className="empty-state__title">No matches</div>
+                    Try a different search term.
+                  </div>
                 </td>
               </tr>
             ) : (
-              filtered.map((c) => {
-                const name = `${c.first_name} ${c.last_name}`.trim();
-                return (
-                  <tr key={c.customer_id}>
-                    <td>{name}</td>
-                    <td>{c.email}</td>
-                    <td className="mono">{c.customer_id}</td>
-                    <td>
-                      <form action={selectCustomerAction}>
-                        <input type="hidden" name="customer_id" value={c.customer_id} />
-                        <button className="primary" type="submit">
-                          Act as
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
-                );
-              })
+              filtered.map((c) => (
+                <tr key={c.customer_id}>
+                  <td className="mono">{c.customer_id}</td>
+                  <td>
+                    <strong>{c.full_name}</strong>
+                  </td>
+                  <td>{c.email}</td>
+                  <td className="num">
+                    <form action={selectCustomerAction}>
+                      <input type="hidden" name="customer_id" value={c.customer_id} />
+                      <button className="primary button--sm" type="submit">
+                        Select customer
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              ))
             )}
           </tbody>
         </table>

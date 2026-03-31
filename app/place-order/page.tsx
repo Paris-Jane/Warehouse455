@@ -25,7 +25,9 @@ export default async function PlaceOrderPage({
   if (!state.ok) {
     return (
       <section>
-        <h1>Place order</h1>
+        <header className="page-header">
+          <h1 className="page-title">Place order</h1>
+        </header>
         <p>{state.message}</p>
       </section>
     );
@@ -40,36 +42,46 @@ export default async function PlaceOrderPage({
 
   return (
     <section>
-      <h1>Place order</h1>
-      <p className="muted">
-        Acting as{" "}
-        <strong>
-          {session.customer.first_name} {session.customer.last_name}
-        </strong>
-        .
-      </p>
+      <header className="page-header">
+        <h1 className="page-title">Place order</h1>
+        <p className="page-desc">
+          Build an order for <strong>{session.customer.full_name}</strong>. Totals and{" "}
+          <span className="mono">line_total</span> values are finalized on the server inside a single
+          transaction.
+        </p>
+      </header>
+
+      <div className="card" style={{ marginBottom: "1.25rem" }}>
+        <div style={{ fontWeight: 600 }}>{session.customer.full_name}</div>
+        <div className="muted" style={{ fontSize: "0.9rem" }}>
+          {session.customer.email}
+        </div>
+        <span className="badge-mono" style={{ marginTop: "0.5rem", display: "inline-block" }}>
+          customer_id {session.customer.customer_id}
+        </span>
+      </div>
 
       {err === "lines" ? (
-        <p style={{ color: "var(--danger)" }}>
+        <div className="alert alert--error">
           Add at least one valid line item (product and positive quantity).
-        </p>
+        </div>
       ) : null}
       {err === "product" ? (
-        <p style={{ color: "var(--danger)" }}>One of the selected products was not found.</p>
+        <div className="alert alert--error">One of the selected products was not found.</div>
       ) : null}
       {err === "tx" ? (
-        <p style={{ color: "var(--danger)" }}>
-          The database transaction failed. Please try again.
-        </p>
+        <div className="alert alert--error">The database transaction failed. Please try again.</div>
       ) : null}
       {err === "db" ? (
-        <p style={{ color: "var(--danger)" }}>Database unavailable.</p>
+        <div className="alert alert--error">Database unavailable.</div>
       ) : null}
 
       <PlaceOrderForm products={products} />
 
-      <p style={{ marginTop: "1rem" }}>
+      <p style={{ marginTop: "1.25rem" }} className="muted">
         <Link href="/orders">Order history</Link>
+        {" · "}
+        <Link href="/dashboard">Dashboard</Link>
       </p>
     </section>
   );

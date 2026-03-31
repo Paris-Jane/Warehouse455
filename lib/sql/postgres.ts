@@ -1,13 +1,10 @@
 /**
- * Postgres SQL for Supabase schema (quoted mixed-case table names).
- * Fulfilled = order has a shipment with ship_datetime set.
- * Mock scoring writes to "Shipments".late_delivery (0/1), not order_predictions.
+ * Postgres SQL for Supabase (quoted mixed-case tables). Mirrors SQLite semantics:
+ * — "Open" fulfillment queue = orders with no rows in Shipments yet.
+ * — Scoring persists to order_predictions (late_delivery_probability, etc.), not Shipments.
  */
 
-const fulfilled = `CASE WHEN EXISTS (
-  SELECT 1 FROM "Shipments" sh
-  WHERE sh.order_id = o.order_id AND sh.ship_datetime IS NOT NULL
-) THEN 1 ELSE 0 END`;
+const openOrder = `NOT EXISTS (SELECT 1 FROM "Shipments" s WHERE s.order_id = o.order_id)`;
 
 export const PgSql = {
   listPublicTables: `
@@ -31,35 +28,13 @@ export const PgSql = {
   `,
 
   customersList: `
-    SELECT
-      customer_id,
-      NULLIF(trim(split_part(COALESCE(full_name, ''), ' ', 1)), '') AS first_name,
-      CASE
-        WHEN strpos(trim(COALESCE(full_name, '')), ' ') > 0 THEN
-          trim(substring(trim(full_name) from (strpos(trim(full_name), ' ') + 1)))
-        ELSE ''
-      END AS last_name,
-      COALESCE(email, '') AS email
+    SELECT customer_id, full_name, email
     FROM "Customers"
-    ORDER BY
-      lower(CASE
-        WHEN strpos(trim(COALESCE(full_name, '')), ' ') > 0 THEN
-          trim(substring(trim(full_name) from (strpos(trim(full_name), ' ') + 1)))
-        ELSE trim(COALESCE(full_name, ''))
-      END),
-      lower(split_part(trim(COALESCE(full_name, '')), ' ', 1))
+    ORDER BY lower(full_name), customer_id
   `,
 
   customerById: `
-    SELECT
-      customer_id,
-      NULLIF(trim(split_part(COALESCE(full_name, ''), ' ', 1)), '') AS first_name,
-      CASE
-        WHEN strpos(trim(COALESCE(full_name, '')), ' ') > 0 THEN
-          trim(substring(trim(full_name) from (strpos(trim(full_name), ' ') + 1)))
-        ELSE ''
-      END AS last_name,
-      COALESCE(email, '') AS email
+    SELECT customer_id, full_name, email
     FROM "Customers"
     WHERE customer_id = $1
   `,
@@ -67,20 +42,22 @@ export const PgSql = {
   customerOrderStats: `
     SELECT
       COUNT(*)::int AS order_count,
-      COALESCE(SUM(order_total), 0)::float AS total_spend
+      COALESCE(SUM(order_total), 0)::float AS total_spend,
+      MAX(order_datetime)::text AS last_order_datetime
     FROM "Orders"
     WHERE customer_id = $1
   `,
 
   customerRecentOrders: `
     SELECT
-      order_id,
-      order_datetime::text AS order_timestamp,
-      ${fulfilled} AS fulfilled,
-      order_total AS total_value
+      o.order_id,
+      o.order_datetime::text AS order_datetime,
+      o.order_total::float AS order_total,
+      (SELECT COUNT(*)::int FROM "Order Items" oi WHERE oi.order_id = o.order_id) AS item_count,
+      (SELECT COUNT(*)::int FROM "Shipments" sh WHERE sh.order_id = o.order_id) AS shipment_count
     FROM "Orders" o
-    WHERE customer_id = $1
-    ORDER BY order_datetime DESC NULLS LAST
+    WHERE o.customer_id = $1
+    ORDER BY o.order_datetime DESC NULLS LAST
     LIMIT 5
   `,
 
@@ -95,18 +72,12 @@ export const PgSql = {
   `,
 
   insertOrder: `
-    INSERT INTO "Orders" (
-      order_id, customer_id, order_datetime, order_total,
-      order_subtotal, shipping_fee, tax_amount
-    )
+    INSERT INTO "Orders" (order_id, customer_id, order_datetime, order_total)
     VALUES (
       (SELECT COALESCE(MAX(order_id), 0) + 1 FROM "Orders"),
       $1,
       NOW(),
-      $2,
-      $2,
-      0,
-      0
+      $2
     )
     RETURNING order_id
   `,
@@ -117,20 +88,20 @@ export const PgSql = {
     )
     VALUES (
       (SELECT COALESCE(MAX(order_item_id), 0) + 1 FROM "Order Items"),
-      $1, $2, $3, $4,
-      ($3::float * $4::float)
+      $1, $2, $3, $4, $5
     )
   `,
 
   customerOrders: `
     SELECT
-      order_id,
-      order_datetime::text AS order_timestamp,
-      ${fulfilled} AS fulfilled,
-      order_total AS total_value
+      o.order_id,
+      o.order_datetime::text AS order_datetime,
+      o.order_total::float AS order_total,
+      (SELECT COUNT(*)::int FROM "Order Items" oi WHERE oi.order_id = o.order_id) AS item_count,
+      (SELECT COUNT(*)::int FROM "Shipments" sh WHERE sh.order_id = o.order_id) AS shipment_count
     FROM "Orders" o
-    WHERE customer_id = $1
-    ORDER BY order_datetime DESC NULLS LAST
+    WHERE o.customer_id = $1
+    ORDER BY o.order_datetime DESC NULLS LAST
   `,
 
   orderBelongsToCustomer: `
@@ -139,44 +110,47 @@ export const PgSql = {
     WHERE order_id = $1 AND customer_id = $2
   `,
 
+  orderHeaderForCustomer: `
+    SELECT
+      o.order_id,
+      o.order_datetime::text AS order_datetime,
+      o.order_total::float AS order_total,
+      (SELECT COUNT(*)::int FROM "Order Items" oi WHERE oi.order_id = o.order_id) AS item_count
+    FROM "Orders" o
+    WHERE o.order_id = $1 AND o.customer_id = $2
+  `,
+
   orderLineItems: `
     SELECT
       pr.product_name,
       oi.quantity::int AS quantity,
       oi.unit_price::float AS unit_price,
-      (oi.quantity::float * oi.unit_price::float) AS line_total
+      oi.line_total::float AS line_total
     FROM "Order Items" oi
     JOIN "Products" pr ON pr.product_id = oi.product_id
     WHERE oi.order_id = $1
     ORDER BY oi.order_item_id
   `,
 
-  /** Priority queue: open orders, latest shipment row for prediction fields */
   warehousePriorityQueue: `
     SELECT
       o.order_id,
-      o.order_datetime::text AS order_timestamp,
-      o.order_total::float AS total_value,
-      ${fulfilled} AS fulfilled,
+      o.order_datetime::text AS order_datetime,
+      o.order_total::float AS order_total,
       c.customer_id,
       trim(COALESCE(c.full_name, '')) AS customer_name,
-      CASE
-        WHEN ls.late_delivery IS NOT NULL AND ls.late_delivery <> 0 THEN 0.9::float
-        ELSE LEAST(0.99::float, GREATEST(0.02::float, COALESCE(o.risk_score, 30)::float / 100.0))
-      END AS late_delivery_probability,
-      COALESCE(ls.late_delivery::int, 0) AS predicted_late_delivery,
-      COALESCE(ls.ship_datetime, o.order_datetime)::text AS prediction_timestamp
+      CASE WHEN p.order_id IS NOT NULL THEN 1 ELSE 0 END::int AS has_prediction,
+      COALESCE(p.late_delivery_probability, 0)::float AS late_delivery_probability,
+      COALESCE(p.predicted_late_delivery, 0)::int AS predicted_late_delivery,
+      COALESCE(p.prediction_timestamp::text, '') AS prediction_timestamp
     FROM "Orders" o
     JOIN "Customers" c ON c.customer_id = o.customer_id
-    LEFT JOIN LATERAL (
-      SELECT s.shipment_id, s.late_delivery, s.ship_datetime
-      FROM "Shipments" s
-      WHERE s.order_id = o.order_id
-      ORDER BY s.shipment_id DESC
-      LIMIT 1
-    ) ls ON true
-    WHERE ${fulfilled} = 0
-    ORDER BY late_delivery_probability DESC, o.order_datetime ASC NULLS LAST
+    LEFT JOIN order_predictions p ON p.order_id = o.order_id
+    WHERE ${openOrder}
+    ORDER BY
+      has_prediction DESC,
+      COALESCE(p.late_delivery_probability, 0) DESC,
+      o.order_datetime ASC NULLS LAST
     LIMIT 50
   `,
 
@@ -185,32 +159,23 @@ export const PgSql = {
       o.order_id,
       o.customer_id,
       o.order_datetime::text AS order_timestamp,
-      o.order_total::float AS total_value,
-      ${fulfilled}::int AS fulfilled
+      o.order_total::float AS total_value
     FROM "Orders" o
-    WHERE ${fulfilled} = 0
+    WHERE ${openOrder}
     ORDER BY o.order_id
   `,
 
-  updateLatestShipmentLateDelivery: `
-    UPDATE "Shipments" s
-    SET late_delivery = $2
-    FROM (
-      SELECT shipment_id
-      FROM "Shipments"
-      WHERE order_id = $1
-      ORDER BY shipment_id DESC
-      LIMIT 1
-    ) x
-    WHERE s.shipment_id = x.shipment_id
-  `,
-
-  insertShipmentScore: `
-    INSERT INTO "Shipments" (shipment_id, order_id, late_delivery)
-    VALUES (
-      (SELECT COALESCE(MAX(shipment_id), 0) + 1 FROM "Shipments"),
-      $1,
-      $2
+  upsertOrderPrediction: `
+    INSERT INTO order_predictions (
+      order_id,
+      late_delivery_probability,
+      predicted_late_delivery,
+      prediction_timestamp
     )
+    VALUES ($1, $2, $3, NOW())
+    ON CONFLICT (order_id) DO UPDATE SET
+      late_delivery_probability = EXCLUDED.late_delivery_probability,
+      predicted_late_delivery = EXCLUDED.predicted_late_delivery,
+      prediction_timestamp = EXCLUDED.prediction_timestamp
   `,
 } as const;

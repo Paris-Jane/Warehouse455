@@ -7,9 +7,9 @@ import { createPythonScriptScoringProvider } from "./python-provider";
 import type { ScoringProvider } from "./types";
 
 /**
- * Course default with SQLite: `python` runs `jobs/run_inference.py` → `order_predictions`.
- * With `DATABASE_URL` (Postgres), default is `mock` because the Python script only writes `shop.db`.
- * Override anytime with SCORING_PROVIDER=mock | python.
+ * Default without `DATABASE_URL`: `python` runs `jobs/run_inference.py` → SQLite `order_predictions`.
+ * With `DATABASE_URL`, default is `mock` (Python only touches `shop.db`); mock writes `order_predictions` via `pg`.
+ * Override with SCORING_PROVIDER=mock | python.
  */
 function envProviderKey(): string {
   const raw = process.env.SCORING_PROVIDER?.trim().toLowerCase();

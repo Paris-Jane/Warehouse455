@@ -1,17 +1,16 @@
 /**
- * Centralized SQL strings for the operational schema.
- * Edit here when the DB contract or reporting queries change.
+ * Centralized SQL strings for SQLite (aligned with operational Postgres schema).
  */
 
 export const SQL = {
   customersList: `
-    SELECT customer_id, first_name, last_name, email
+    SELECT customer_id, full_name, email
     FROM customers
-    ORDER BY last_name COLLATE NOCASE, first_name COLLATE NOCASE
+    ORDER BY lower(full_name), customer_id
   `,
 
   customerById: `
-    SELECT customer_id, first_name, last_name, email
+    SELECT customer_id, full_name, email
     FROM customers
     WHERE customer_id = ?
   `,
@@ -19,16 +18,22 @@ export const SQL = {
   customerOrderStats: `
     SELECT
       COUNT(*) AS order_count,
-      COALESCE(SUM(total_value), 0) AS total_spend
+      COALESCE(SUM(order_total), 0) AS total_spend,
+      MAX(order_datetime) AS last_order_datetime
     FROM orders
     WHERE customer_id = ?
   `,
 
   customerRecentOrders: `
-    SELECT order_id, order_timestamp, fulfilled, total_value
-    FROM orders
-    WHERE customer_id = ?
-    ORDER BY order_timestamp DESC
+    SELECT
+      o.order_id,
+      o.order_datetime AS order_datetime,
+      o.order_total AS order_total,
+      (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.order_id) AS item_count,
+      (SELECT COUNT(*) FROM shipments sh WHERE sh.order_id = o.order_id) AS shipment_count
+    FROM orders o
+    WHERE o.customer_id = ?
+    ORDER BY o.order_datetime DESC
     LIMIT 5
   `,
 
@@ -39,20 +44,25 @@ export const SQL = {
   `,
 
   insertOrder: `
-    INSERT INTO orders (customer_id, order_timestamp, fulfilled, total_value)
-    VALUES (?, datetime('now'), 0, ?)
+    INSERT INTO orders (customer_id, order_datetime, order_total)
+    VALUES (?, datetime('now'), ?)
   `,
 
   insertOrderItem: `
-    INSERT INTO order_items (order_id, product_id, quantity, unit_price)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO order_items (order_id, product_id, quantity, unit_price, line_total)
+    VALUES (?, ?, ?, ?, ?)
   `,
 
   customerOrders: `
-    SELECT order_id, order_timestamp, fulfilled, total_value
-    FROM orders
-    WHERE customer_id = ?
-    ORDER BY order_timestamp DESC
+    SELECT
+      o.order_id,
+      o.order_datetime AS order_datetime,
+      o.order_total AS order_total,
+      (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.order_id) AS item_count,
+      (SELECT COUNT(*) FROM shipments sh WHERE sh.order_id = o.order_id) AS shipment_count
+    FROM orders o
+    WHERE o.customer_id = ?
+    ORDER BY o.order_datetime DESC
   `,
 
   orderBelongsToCustomer: `
@@ -61,43 +71,60 @@ export const SQL = {
     WHERE order_id = ? AND customer_id = ?
   `,
 
+  orderHeaderForCustomer: `
+    SELECT
+      o.order_id,
+      o.order_datetime AS order_datetime,
+      o.order_total AS order_total,
+      (SELECT COUNT(*) FROM order_items oi WHERE oi.order_id = o.order_id) AS item_count
+    FROM orders o
+    WHERE o.order_id = ? AND o.customer_id = ?
+  `,
+
   orderLineItems: `
     SELECT
       pr.product_name,
       oi.quantity,
       oi.unit_price,
-      (oi.quantity * oi.unit_price) AS line_total
+      oi.line_total
     FROM order_items oi
     JOIN products pr ON pr.product_id = oi.product_id
     WHERE oi.order_id = ?
     ORDER BY oi.order_item_id
   `,
 
-  /** Chapter warehouse query (keep in sync with course materials). */
+  /** Unshipped orders (no rows in shipments) with prediction join for warehouse prioritization. */
   warehousePriorityQueue: `
     SELECT
       o.order_id,
-      o.order_timestamp,
-      o.total_value,
-      o.fulfilled,
+      o.order_datetime AS order_datetime,
+      o.order_total AS order_total,
       c.customer_id,
-      c.first_name || ' ' || c.last_name AS customer_name,
-      p.late_delivery_probability,
-      p.predicted_late_delivery,
-      p.prediction_timestamp
+      c.full_name AS customer_name,
+      CASE WHEN p.order_id IS NOT NULL THEN 1 ELSE 0 END AS has_prediction,
+      COALESCE(p.late_delivery_probability, 0) AS late_delivery_probability,
+      COALESCE(p.predicted_late_delivery, 0) AS predicted_late_delivery,
+      COALESCE(p.prediction_timestamp, '') AS prediction_timestamp
     FROM orders o
     JOIN customers c ON c.customer_id = o.customer_id
-    JOIN order_predictions p ON p.order_id = o.order_id
-    WHERE o.fulfilled = 0
-    ORDER BY p.late_delivery_probability DESC, o.order_timestamp ASC
+    LEFT JOIN order_predictions p ON p.order_id = o.order_id
+    WHERE NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.order_id)
+    ORDER BY
+      has_prediction DESC,
+      COALESCE(p.late_delivery_probability, 0) DESC,
+      o.order_datetime ASC
     LIMIT 50
   `,
 
   openOrdersForScoring: `
-    SELECT order_id, customer_id, order_timestamp, total_value, fulfilled
-    FROM orders
-    WHERE fulfilled = 0
-    ORDER BY order_id
+    SELECT
+      o.order_id,
+      o.customer_id,
+      o.order_datetime AS order_timestamp,
+      o.order_total AS total_value
+    FROM orders o
+    WHERE NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.order_id)
+    ORDER BY o.order_id
   `,
 
   upsertPrediction: `

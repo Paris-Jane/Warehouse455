@@ -2,18 +2,13 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { getSelectedCustomer } from "@/lib/customer";
+import { formatDateTime } from "@/lib/format";
 import {
   dbOrderBelongsToCustomer,
+  dbOrderHeaderForCustomer,
   dbOrderLineItems,
 } from "@/lib/db-access";
 import { getDbState } from "@/lib/db";
-
-type LineRow = {
-  product_name: string;
-  quantity: number;
-  unit_price: number;
-  line_total: number;
-};
 
 export default async function OrderDetailPage({
   params,
@@ -26,7 +21,9 @@ export default async function OrderDetailPage({
   if (!state.ok) {
     return (
       <section>
-        <h1>Order</h1>
+        <header className="page-header">
+          <h1 className="page-title">Order</h1>
+        </header>
         <p>{state.message}</p>
       </section>
     );
@@ -42,45 +39,66 @@ export default async function OrderDetailPage({
     notFound();
   }
 
-  const belongs = await dbOrderBelongsToCustomer(
-    state,
-    id,
-    session.customer.customer_id
-  );
+  const belongs = await dbOrderBelongsToCustomer(state, id, session.customer.customer_id);
   if (!belongs) {
     notFound();
   }
 
-  const lines = (await dbOrderLineItems(state, id)) as LineRow[];
+  const header = await dbOrderHeaderForCustomer(state, id, session.customer.customer_id);
+  const lines = await dbOrderLineItems(state, id);
 
   return (
     <section>
-      <h1>Order {id}</h1>
-      <p className="muted">
-        Line items for customer{" "}
-        <span className="mono">customer_id={session.customer.customer_id}</span>.
-      </p>
+      <header className="page-header">
+        <h1 className="page-title">Order {id}</h1>
+        <p className="page-desc">
+          Line items for <strong>{session.customer.full_name}</strong>{" "}
+          <span className="muted">· customer_id {session.customer.customer_id}</span>
+        </p>
+      </header>
 
+      {header ? (
+        <div className="card" style={{ marginBottom: "1.25rem" }}>
+          <div className="stat-grid" style={{ marginTop: 0 }}>
+            <div className="stat-card">
+              <div className="stat-card__label">order_datetime</div>
+              <div style={{ fontWeight: 600 }}>{formatDateTime(header.order_datetime)}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-card__label">order_total</div>
+              <div style={{ fontWeight: 700, fontSize: "1.15rem" }}>
+                ${header.order_total.toFixed(2)}
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-card__label">Line items</div>
+              <div style={{ fontWeight: 600 }}>{header.item_count}</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <h2 className="section-title">Order items</h2>
       {lines.length === 0 ? (
         <p className="muted">This order has no line items.</p>
       ) : (
         <div className="table-wrap">
-          <table>
+          <table className="data-table">
             <thead>
               <tr>
                 <th>product_name</th>
-                <th>quantity</th>
-                <th>unit_price</th>
-                <th>line_total</th>
+                <th className="num">quantity</th>
+                <th className="num">unit_price</th>
+                <th className="num">line_total</th>
               </tr>
             </thead>
             <tbody>
               {lines.map((l, idx) => (
                 <tr key={`${l.product_name}-${idx}`}>
                   <td>{l.product_name}</td>
-                  <td>{l.quantity}</td>
-                  <td>${l.unit_price.toFixed(2)}</td>
-                  <td>${l.line_total.toFixed(2)}</td>
+                  <td className="num">{l.quantity}</td>
+                  <td className="num">${l.unit_price.toFixed(2)}</td>
+                  <td className="num">${l.line_total.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -88,8 +106,8 @@ export default async function OrderDetailPage({
         </div>
       )}
 
-      <p style={{ marginTop: "1rem" }}>
-        <Link href="/orders">Back to order history</Link>
+      <p style={{ marginTop: "1.5rem" }}>
+        <Link href="/orders">← Order history</Link>
       </p>
     </section>
   );

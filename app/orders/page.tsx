@@ -2,15 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getSelectedCustomer } from "@/lib/customer";
-import { dbCustomerOrders } from "@/lib/db-access";
+import { formatDateTime } from "@/lib/format";
+import { dbCustomerOrders, type OrderSummaryRow } from "@/lib/db-access";
 import { getDbState } from "@/lib/db";
 
-type OrderRow = {
-  order_id: number;
-  order_timestamp: string;
-  fulfilled: number;
-  total_value: number;
-};
+function fulfillmentLabel(shipmentCount: number): { text: string; shipped: boolean } {
+  if (shipmentCount > 0) return { text: "Shipped", shipped: true };
+  return { text: "Open", shipped: false };
+}
 
 export default async function OrdersPage({
   searchParams,
@@ -24,7 +23,9 @@ export default async function OrdersPage({
   if (!state.ok) {
     return (
       <section>
-        <h1>Order history</h1>
+        <header className="page-header">
+          <h1 className="page-title">Order history</h1>
+        </header>
         <p>{state.message}</p>
       </section>
     );
@@ -35,49 +36,78 @@ export default async function OrdersPage({
     redirect("/select-customer");
   }
 
-  const rows = (await dbCustomerOrders(
-    state,
-    session.customer.customer_id
-  )) as OrderRow[];
+  const rows = await dbCustomerOrders(state, session.customer.customer_id);
 
   return (
     <section>
-      <h1>Order history</h1>
+      <header className="page-header">
+        <h1 className="page-title">Order history</h1>
+        <p className="page-desc">
+          Orders for <strong>{session.customer.full_name}</strong>{" "}
+          <span className="muted">(customer_id {session.customer.customer_id})</span>
+        </p>
+      </header>
 
       {placed ? (
-        <div className="card" style={{ borderColor: "#bbf7d0", background: "#f0fdf4" }}>
-          Order placed successfully. It should appear below.
-        </div>
+        <div className="alert alert--success">Order placed successfully. It appears in the list below.</div>
       ) : null}
 
       {rows.length === 0 ? (
-        <p className="muted">No orders for this customer yet.</p>
+        <div className="card">
+          <div className="empty-state">
+            <div className="empty-state__title">No orders yet</div>
+            <p className="muted" style={{ margin: 0 }}>
+              <Link href="/place-order">Place an order</Link> to see it here.
+            </p>
+          </div>
+        </div>
       ) : (
         <div className="table-wrap">
-          <table>
+          <table className="data-table">
             <thead>
               <tr>
-                <th>order_id</th>
-                <th>order_timestamp</th>
-                <th>fulfilled</th>
-                <th>total_value</th>
+                <th>Order ID</th>
+                <th>Order date / time</th>
+                <th className="num">Items</th>
+                <th>Status</th>
+                <th className="num">order_total</th>
+                <th style={{ width: "110px" }} />
               </tr>
             </thead>
             <tbody>
-              {rows.map((o) => (
-                <tr key={o.order_id}>
-                  <td className="mono">
-                    <Link href={`/orders/${o.order_id}`}>{o.order_id}</Link>
-                  </td>
-                  <td className="mono">{o.order_timestamp}</td>
-                  <td>{o.fulfilled ? "yes" : "no"}</td>
-                  <td>${o.total_value.toFixed(2)}</td>
-                </tr>
-              ))}
+              {(rows as OrderSummaryRow[]).map((o) => {
+                const st = fulfillmentLabel(o.shipment_count);
+                return (
+                  <tr key={o.order_id}>
+                    <td className="mono">{o.order_id}</td>
+                    <td>{formatDateTime(o.order_datetime)}</td>
+                    <td className="num">{o.item_count}</td>
+                    <td>
+                      <span
+                        className={
+                          st.shipped ? "status-pill status-pill--shipped" : "status-pill status-pill--open"
+                        }
+                      >
+                        {st.text}
+                      </span>
+                    </td>
+                    <td className="num">${o.order_total.toFixed(2)}</td>
+                    <td className="num">
+                      <Link href={`/orders/${o.order_id}`} className="button button--sm">
+                        Details
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
+
+      <p style={{ marginTop: "1.25rem" }} className="muted">
+        <Link href="/dashboard">← Customer dashboard</Link>
+      </p>
     </section>
   );
 }

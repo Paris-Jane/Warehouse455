@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "db:init": "sqlite3 shop.db < schema.sql"
+    "db:init": "rm -f shop.db && sqlite3 shop.db < schema.sql"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

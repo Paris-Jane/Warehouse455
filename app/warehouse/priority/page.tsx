@@ -1,105 +1,76 @@
-import { dbWarehouseQueue } from "@/lib/db-access";
+import { dbWarehouseQueue, type WarehouseRow } from "@/lib/db-access";
+import { formatDateTime } from "@/lib/format";
 import { getDbState } from "@/lib/db";
-
-type Row = {
-  order_id: number;
-  order_timestamp: string;
-  total_value: number;
-  fulfilled: number;
-  customer_id: number;
-  customer_name: string;
-  late_delivery_probability: number;
-  predicted_late_delivery: number;
-  prediction_timestamp: string;
-};
 
 export default async function WarehousePriorityPage() {
   const state = getDbState();
   if (!state.ok) {
     return (
       <section>
-        <h1>Warehouse priority queue</h1>
+        <header className="page-header">
+          <h1 className="page-title">Warehouse priority queue</h1>
+        </header>
         <p>{state.message}</p>
       </section>
     );
   }
 
-  let rows: Row[] = [];
+  let rows: WarehouseRow[] = [];
   try {
-    rows = (await dbWarehouseQueue(state)) as Row[];
+    rows = await dbWarehouseQueue(state);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return (
       <section>
-        <h1>Warehouse priority queue</h1>
-        <p style={{ color: "var(--danger)" }}>
-          Query failed. For Postgres adjust <span className="mono">lib/sql/postgres.ts</span>; for
-          SQLite use the query in <span className="mono">lib/sql/queries.ts</span> (
-          <span className="mono">warehousePriorityQueue</span>).{" "}
-          <span className="mono">{message}</span>
-        </p>
+        <header className="page-header">
+          <h1 className="page-title">Warehouse priority queue</h1>
+        </header>
+        <div className="alert alert--error">
+          Query failed ({message}). For Postgres ensure <span className="mono">order_predictions</span> exists
+          (see <span className="mono">sql/postgres_order_predictions.sql</span>) and table names match{" "}
+          <span className="mono">lib/sql/postgres.ts</span>.
+        </div>
       </section>
     );
   }
 
-  const sqliteCopy = (
-    <>
-      <p style={{ marginTop: 0 }}>
-        This queue shows up to 50 <strong>unfulfilled</strong> orders that have rows in{" "}
-        <span className="mono">order_predictions</span>, sorted by highest{" "}
-        <span className="mono">late_delivery_probability</span> first, then oldest{" "}
-        <span className="mono">order_timestamp</span>. It helps the warehouse ship the riskiest open
-        orders first. The SQL matches the chapter spec (join <span className="mono">orders</span>,{" "}
-        <span className="mono">customers</span>, <span className="mono">order_predictions</span>).
-      </p>
-      <p className="muted" style={{ marginBottom: 0 }}>
-        If this is empty, run <strong>Run Scoring</strong> on <span className="mono">/scoring</span>{" "}
-        so <span className="mono">jobs/run_inference.py</span> (or mock mode) fills{" "}
-        <span className="mono">order_predictions</span>.
-      </p>
-    </>
-  );
-
-  const postgresCopy = (
-    <>
-      <p style={{ marginTop: 0 }}>
-        This queue lists <strong>unfulfilled</strong> orders (no <span className="mono">Shipments</span>{" "}
-        row with <span className="mono">ship_datetime</span> yet), using the latest shipment signal and{" "}
-        <span className="mono">Orders.risk_score</span> as a fallback. This path is for optional
-        Postgres/Supabase; the chapter assignment uses SQLite + <span className="mono">order_predictions</span>.
-      </p>
-      <p className="muted" style={{ marginBottom: 0 }}>
-        Run scoring from <span className="mono">/scoring</span> (mock provider) to refresh shipment scores.
-      </p>
-    </>
-  );
-
   return (
     <section>
-      <h1>Warehouse priority queue</h1>
+      <header className="page-header">
+        <h1 className="page-title">Late delivery priority queue</h1>
+        <p className="page-desc">
+          Up to <strong>50</strong> orders that are still <strong>open</strong> (no row in{" "}
+          <span className="mono">shipments</span> / <span className="mono">Shipments</span> yet), ranked by
+          model output in <span className="mono">order_predictions</span>. Rows without a prediction sort to
+          the bottom until you run scoring. <span className="mono">Shipments.late_delivery</span> is operational
+          data and is not treated as a probability score.
+        </p>
+      </header>
 
       <div className="card">
-        {state.kind === "sqlite" ? sqliteCopy : postgresCopy}
+        <p style={{ margin: 0, fontSize: "0.9rem" }}>
+          Use <strong>Run Scoring</strong> to populate or refresh <span className="mono">order_predictions</span>{" "}
+          (SQLite: <span className="mono">jobs/run_inference.py</span> or mock provider; Postgres: mock provider
+          writes the same table).
+        </p>
       </div>
 
       {rows.length === 0 ? (
         <p className="muted">
-          {state.kind === "sqlite"
-            ? "No rows (need unfulfilled orders with matching order_predictions — run scoring first)."
-            : "No unfulfilled orders in the queue."}
+          No open orders in the queue. Orders disappear here once they have at least one shipment, or there are
+          no rows yet.
         </p>
       ) : (
         <div className="table-wrap">
-          <table>
+          <table className="data-table">
             <thead>
               <tr>
                 <th>order_id</th>
-                <th>order_timestamp</th>
-                <th>total_value</th>
-                <th>fulfilled</th>
-                <th>customer_id</th>
-                <th>customer_name</th>
-                <th>late_delivery_probability</th>
+                <th>order_datetime</th>
+                <th className="num">order_total</th>
+                <th>customer</th>
+                <th>Prediction</th>
+                <th className="num">late_delivery_probability</th>
                 <th>predicted_late_delivery</th>
                 <th>prediction_timestamp</th>
               </tr>
@@ -108,14 +79,32 @@ export default async function WarehousePriorityPage() {
               {rows.map((r) => (
                 <tr key={r.order_id}>
                   <td className="mono">{r.order_id}</td>
-                  <td className="mono">{r.order_timestamp}</td>
-                  <td>${r.total_value.toFixed(2)}</td>
-                  <td>{r.fulfilled ? "yes" : "no"}</td>
-                  <td className="mono">{r.customer_id}</td>
-                  <td>{r.customer_name}</td>
-                  <td>{r.late_delivery_probability.toFixed(4)}</td>
-                  <td>{r.predicted_late_delivery ? "yes" : "no"}</td>
-                  <td className="mono">{r.prediction_timestamp}</td>
+                  <td>{formatDateTime(r.order_datetime)}</td>
+                  <td className="num">${r.order_total.toFixed(2)}</td>
+                  <td>
+                    <div style={{ fontWeight: 500 }}>{r.customer_name}</div>
+                    <div className="muted mono" style={{ fontSize: "0.8rem" }}>
+                      id {r.customer_id}
+                    </div>
+                  </td>
+                  <td>
+                    {r.has_prediction ? (
+                      <span className="status-pill status-pill--shipped">Scored</span>
+                    ) : (
+                      <span className="status-pill status-pill--open">Pending</span>
+                    )}
+                  </td>
+                  <td className="num">
+                    {r.has_prediction ? r.late_delivery_probability.toFixed(4) : "—"}
+                  </td>
+                  <td>
+                    {r.has_prediction ? (r.predicted_late_delivery ? "yes" : "no") : "—"}
+                  </td>
+                  <td className="mono" style={{ fontSize: "0.8rem" }}>
+                    {r.has_prediction && r.prediction_timestamp
+                      ? formatDateTime(r.prediction_timestamp)
+                      : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>

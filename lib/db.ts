@@ -23,6 +23,7 @@ const SQLITE_TABLES = [
   "orders",
   "order_items",
   "products",
+  "shipments",
   "order_predictions",
 ] as const;
 
