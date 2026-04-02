@@ -37,13 +37,13 @@ export default async function WarehousePriorityPage() {
   return (
     <section>
       <header className="page-header">
-        <h1 className="page-title">Late delivery priority queue</h1>
+        <h1 className="page-title">Warehouse priority queue</h1>
         <p className="page-desc">
           Up to <strong>50</strong> orders that are still <strong>open</strong> (no row in{" "}
           <span className="mono">shipments</span> / <span className="mono">Shipments</span> yet), ranked by
-          model output in <span className="mono">order_predictions</span>. Rows without a prediction sort to
-          the bottom until you run scoring. <span className="mono">Shipments.late_delivery</span> is operational
-          data and is not treated as a probability score.
+          fraud score from <span className="mono">order_predictions</span>, then legacy late-delivery fields.
+          Rows without a prediction sort to the bottom until you run scoring.{" "}
+          <span className="mono">Shipments.late_delivery</span> is operational data, not the ML output.
         </p>
       </header>
 
@@ -70,8 +70,9 @@ export default async function WarehousePriorityPage() {
                 <th className="num">order_total</th>
                 <th>customer</th>
                 <th>Prediction</th>
+                <th className="num">fraud_probability</th>
+                <th>predicted_fraud</th>
                 <th className="num">late_delivery_probability</th>
-                <th>predicted_late_delivery</th>
                 <th>prediction_timestamp</th>
               </tr>
             </thead>
@@ -95,10 +96,13 @@ export default async function WarehousePriorityPage() {
                     )}
                   </td>
                   <td className="num">
-                    {r.has_prediction ? r.late_delivery_probability.toFixed(4) : "—"}
+                    {r.has_prediction ? r.fraud_probability.toFixed(4) : "—"}
                   </td>
                   <td>
-                    {r.has_prediction ? (r.predicted_late_delivery ? "yes" : "no") : "—"}
+                    {r.has_prediction ? (r.predicted_fraud ? "yes" : "no") : "—"}
+                  </td>
+                  <td className="num">
+                    {r.has_prediction ? r.late_delivery_probability.toFixed(4) : "—"}
                   </td>
                   <td className="mono" style={{ fontSize: "0.8rem" }}>
                     {r.has_prediction && r.prediction_timestamp

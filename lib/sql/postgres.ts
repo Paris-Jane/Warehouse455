@@ -142,6 +142,8 @@ export const PgSql = {
       CASE WHEN p.order_id IS NOT NULL THEN 1 ELSE 0 END::int AS has_prediction,
       COALESCE(p.late_delivery_probability, 0)::float AS late_delivery_probability,
       COALESCE(p.predicted_late_delivery, 0)::int AS predicted_late_delivery,
+      COALESCE(p.fraud_probability, 0)::float AS fraud_probability,
+      COALESCE(p.predicted_fraud, 0)::int AS predicted_fraud,
       COALESCE(p.prediction_timestamp::text, '') AS prediction_timestamp
     FROM "Orders" o
     JOIN "Customers" c ON c.customer_id = o.customer_id
@@ -149,9 +151,24 @@ export const PgSql = {
     WHERE ${openOrder}
     ORDER BY
       has_prediction DESC,
+      COALESCE(p.fraud_probability, 0) DESC,
       COALESCE(p.late_delivery_probability, 0) DESC,
       o.order_datetime ASC NULLS LAST
     LIMIT 50
+  `,
+
+  fraudFlaggedOpenOrders: `
+    SELECT
+      o.order_id,
+      o.order_total::float AS order_total,
+      trim(COALESCE(c.full_name, '')) AS customer_name,
+      p.fraud_probability::float AS fraud_probability
+    FROM "Orders" o
+    JOIN "Customers" c ON c.customer_id = o.customer_id
+    JOIN order_predictions p ON p.order_id = o.order_id
+    WHERE ${openOrder}
+      AND p.predicted_fraud = 1
+    ORDER BY p.fraud_probability DESC NULLS LAST, o.order_id
   `,
 
   openOrdersForScoring: `
@@ -170,12 +187,16 @@ export const PgSql = {
       order_id,
       late_delivery_probability,
       predicted_late_delivery,
+      fraud_probability,
+      predicted_fraud,
       prediction_timestamp
     )
-    VALUES ($1, $2, $3, NOW())
+    VALUES ($1, $2, $3, $4, $5, NOW())
     ON CONFLICT (order_id) DO UPDATE SET
       late_delivery_probability = EXCLUDED.late_delivery_probability,
       predicted_late_delivery = EXCLUDED.predicted_late_delivery,
+      fraud_probability = EXCLUDED.fraud_probability,
+      predicted_fraud = EXCLUDED.predicted_fraud,
       prediction_timestamp = EXCLUDED.prediction_timestamp
   `,
 } as const;

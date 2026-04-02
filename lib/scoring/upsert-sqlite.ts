@@ -13,7 +13,9 @@ export function upsertPredictionsSqlite(db: Database, predictions: PredictionInp
       stmt.run(
         p.order_id,
         p.late_delivery_probability,
-        p.predicted_late_delivery
+        p.predicted_late_delivery,
+        p.fraud_probability,
+        p.predicted_fraud
       );
     }
   });

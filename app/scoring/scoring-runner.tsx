@@ -63,6 +63,42 @@ export function ScoringRunner({ initialLabel }: { initialLabel: string }) {
               </p>
             ) : null}
 
+            {result.ok && result.fraudFlaggedOrders && result.fraudFlaggedOrders.length > 0 ? (
+              <div className="field" style={{ marginTop: "1rem", marginBottom: 0 }}>
+                <div className="muted" style={{ fontSize: "0.8rem", marginBottom: "0.35rem" }}>
+                  Flagged as fraudulent (open orders, {result.fraudFlaggedOrders.length})
+                </div>
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>order_id</th>
+                        <th>customer</th>
+                        <th className="num">order_total</th>
+                        <th className="num">fraud_probability</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.fraudFlaggedOrders.map((row) => (
+                        <tr key={row.order_id}>
+                          <td className="mono">{row.order_id}</td>
+                          <td>{row.customer_name}</td>
+                          <td className="num">${row.order_total.toFixed(2)}</td>
+                          <td className="num">{row.fraud_probability.toFixed(4)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : null}
+
+            {result.ok && result.fraudFlaggedOrders && result.fraudFlaggedOrders.length === 0 ? (
+              <p className="muted" style={{ marginTop: "1rem", marginBottom: 0, fontSize: "0.9rem" }}>
+                No open orders were flagged as fraudulent for this run.
+              </p>
+            ) : null}
+
             {result.stdoutPreview ? (
               <div className="field" style={{ marginTop: "1rem", marginBottom: 0 }}>
                 <div className="muted" style={{ fontSize: "0.8rem" }}>

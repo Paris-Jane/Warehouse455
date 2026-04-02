@@ -104,6 +104,8 @@ export const SQL = {
       CASE WHEN p.order_id IS NOT NULL THEN 1 ELSE 0 END AS has_prediction,
       COALESCE(p.late_delivery_probability, 0) AS late_delivery_probability,
       COALESCE(p.predicted_late_delivery, 0) AS predicted_late_delivery,
+      COALESCE(p.fraud_probability, 0) AS fraud_probability,
+      COALESCE(p.predicted_fraud, 0) AS predicted_fraud,
       COALESCE(p.prediction_timestamp, '') AS prediction_timestamp
     FROM orders o
     JOIN customers c ON c.customer_id = o.customer_id
@@ -111,9 +113,24 @@ export const SQL = {
     WHERE NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.order_id)
     ORDER BY
       has_prediction DESC,
+      COALESCE(p.fraud_probability, 0) DESC,
       COALESCE(p.late_delivery_probability, 0) DESC,
       o.order_datetime ASC
     LIMIT 50
+  `,
+
+  fraudFlaggedOpenOrders: `
+    SELECT
+      o.order_id,
+      o.order_total AS order_total,
+      trim(COALESCE(c.full_name, '')) AS customer_name,
+      p.fraud_probability AS fraud_probability
+    FROM orders o
+    JOIN customers c ON c.customer_id = o.customer_id
+    JOIN order_predictions p ON p.order_id = o.order_id
+    WHERE NOT EXISTS (SELECT 1 FROM shipments s WHERE s.order_id = o.order_id)
+      AND p.predicted_fraud = 1
+    ORDER BY p.fraud_probability DESC, o.order_id
   `,
 
   openOrdersForScoring: `
@@ -132,11 +149,15 @@ export const SQL = {
       order_id,
       late_delivery_probability,
       predicted_late_delivery,
+      fraud_probability,
+      predicted_fraud,
       prediction_timestamp
-    ) VALUES (?, ?, ?, datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(order_id) DO UPDATE SET
       late_delivery_probability = excluded.late_delivery_probability,
       predicted_late_delivery = excluded.predicted_late_delivery,
+      fraud_probability = excluded.fraud_probability,
+      predicted_fraud = excluded.predicted_fraud,
       prediction_timestamp = excluded.prediction_timestamp
   `,
 

@@ -13,20 +13,23 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS customers (
   customer_id INTEGER PRIMARY KEY AUTOINCREMENT,
   full_name TEXT NOT NULL,
-  email TEXT NOT NULL
+  email TEXT NOT NULL,
+  birthdate TEXT
 );
 
 CREATE TABLE IF NOT EXISTS products (
   product_id INTEGER PRIMARY KEY AUTOINCREMENT,
   product_name TEXT NOT NULL,
-  price REAL NOT NULL
+  price REAL NOT NULL,
+  cost REAL NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS orders (
   order_id INTEGER PRIMARY KEY AUTOINCREMENT,
   customer_id INTEGER NOT NULL REFERENCES customers (customer_id),
   order_datetime TEXT NOT NULL DEFAULT (datetime('now')),
-  order_total REAL NOT NULL DEFAULT 0
+  order_total REAL NOT NULL DEFAULT 0,
+  risk_score REAL NOT NULL DEFAULT 50
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -46,27 +49,29 @@ CREATE TABLE IF NOT EXISTS shipments (
 
 CREATE TABLE IF NOT EXISTS order_predictions (
   order_id INTEGER PRIMARY KEY REFERENCES orders (order_id) ON DELETE CASCADE,
-  late_delivery_probability REAL NOT NULL,
-  predicted_late_delivery INTEGER NOT NULL CHECK (predicted_late_delivery IN (0, 1)),
+  late_delivery_probability REAL NOT NULL DEFAULT 0,
+  predicted_late_delivery INTEGER NOT NULL DEFAULT 0 CHECK (predicted_late_delivery IN (0, 1)),
+  fraud_probability REAL NOT NULL DEFAULT 0,
+  predicted_fraud INTEGER NOT NULL DEFAULT 0 CHECK (predicted_fraud IN (0, 1)),
   prediction_timestamp TEXT NOT NULL
 );
 
-INSERT INTO customers (full_name, email) VALUES
-  ('Ada Lovelace', 'ada@example.edu'),
-  ('Alan Turing', 'alan@example.edu'),
-  ('Grace Hopper', 'grace@example.edu');
+INSERT INTO customers (full_name, email, birthdate) VALUES
+  ('Ada Lovelace', 'ada@example.edu', '1990-03-10'),
+  ('Alan Turing', 'alan@example.edu', '1985-07-22'),
+  ('Grace Hopper', 'grace@example.edu', '1992-11-01');
 
-INSERT INTO products (product_name, price) VALUES
-  ('Notebook', 4.5),
-  ('Pen Set', 12.0),
-  ('Desk Lamp', 29.99),
-  ('USB Cable', 8.25);
+INSERT INTO products (product_name, price, cost) VALUES
+  ('Notebook', 4.5, 2.1),
+  ('Pen Set', 12.0, 5.0),
+  ('Desk Lamp', 29.99, 14.5),
+  ('USB Cable', 8.25, 3.0);
 
 -- Customer 1: one open order, one shipped order
-INSERT INTO orders (customer_id, order_datetime, order_total) VALUES
-  (1, datetime('now', '-5 days'), 9.0),
-  (1, datetime('now', '-2 days'), 29.99),
-  (2, datetime('now', '-1 days'), 8.25);
+INSERT INTO orders (customer_id, order_datetime, order_total, risk_score) VALUES
+  (1, datetime('now', '-5 days'), 9.0, 38),
+  (1, datetime('now', '-2 days'), 29.99, 55),
+  (2, datetime('now', '-1 days'), 8.25, 44);
 
 INSERT INTO order_items (order_id, product_id, quantity, unit_price, line_total) VALUES
   (1, 1, 2, 4.5, 9.0),

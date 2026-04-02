@@ -6,7 +6,7 @@ import { upsertPredictionsSqlite } from "@/lib/scoring/upsert-sqlite";
 
 import type { CustomerRow } from "./customer";
 import type { DbReady } from "./db";
-import type { PredictionInput } from "./scoring/types";
+import type { FraudFlaggedOrderRow, PredictionInput } from "./scoring/types";
 
 function num(v: unknown, fallback = 0): number {
   if (v == null) return fallback;
@@ -268,6 +268,8 @@ export type WarehouseRow = {
   has_prediction: number;
   late_delivery_probability: number;
   predicted_late_delivery: number;
+  fraud_probability: number;
+  predicted_fraud: number;
   prediction_timestamp: string;
 };
 
@@ -285,7 +287,22 @@ export async function dbWarehouseQueue(ready: DbReady): Promise<WarehouseRow[]> 
     has_prediction: num((r as WarehouseRow).has_prediction),
     late_delivery_probability: num((r as WarehouseRow).late_delivery_probability),
     predicted_late_delivery: num((r as WarehouseRow).predicted_late_delivery),
+    fraud_probability: num((r as WarehouseRow).fraud_probability),
+    predicted_fraud: num((r as WarehouseRow).predicted_fraud),
     prediction_timestamp: String((r as WarehouseRow).prediction_timestamp ?? ""),
+  }));
+}
+
+export async function dbFraudFlaggedOpenOrders(ready: DbReady): Promise<FraudFlaggedOrderRow[]> {
+  if (ready.kind === "sqlite") {
+    return ready.db.prepare(SQL.fraudFlaggedOpenOrders).all() as FraudFlaggedOrderRow[];
+  }
+  const { rows } = await ready.pool.query(PgSql.fraudFlaggedOpenOrders);
+  return rows.map((r) => ({
+    order_id: num((r as FraudFlaggedOrderRow).order_id),
+    order_total: num((r as FraudFlaggedOrderRow).order_total),
+    customer_name: String((r as FraudFlaggedOrderRow).customer_name ?? ""),
+    fraud_probability: num((r as FraudFlaggedOrderRow).fraud_probability),
   }));
 }
 
@@ -326,6 +343,8 @@ export async function dbUpsertPredictions(
         p.order_id,
         p.late_delivery_probability,
         p.predicted_late_delivery,
+        p.fraud_probability,
+        p.predicted_fraud,
       ]);
     }
     await client.query("COMMIT");

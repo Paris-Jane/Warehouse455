@@ -34,13 +34,14 @@ export function createMockScoringProvider(ready: DbReady): ScoringProvider {
       try {
         const rows = await dbOpenOrdersForScoring(ready);
         const preds: PredictionInput[] = (rows as OpenOrderRow[]).map((r) => {
-          const late_delivery_probability = mockProbability(r);
-          const predicted_late_delivery: 0 | 1 =
-            late_delivery_probability >= 0.5 ? 1 : 0;
+          const fraud_probability = mockProbability(r);
+          const predicted_fraud: 0 | 1 = fraud_probability >= 0.5 ? 1 : 0;
           return {
             order_id: r.order_id,
-            late_delivery_probability,
-            predicted_late_delivery,
+            late_delivery_probability: 0,
+            predicted_late_delivery: 0,
+            fraud_probability,
+            predicted_fraud,
           };
         });
 
